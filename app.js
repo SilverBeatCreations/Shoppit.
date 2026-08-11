@@ -1,0 +1,917 @@
+/* ============================================================
+   SHOPPIT — app.js
+   Voice recognition · predictive items · budget tracking ·
+   animated progress · Kids+ maths · smart save tips ·
+   offline storage · export/share · scanner · timer · dark mode
+   ============================================================ */
+(function () {
+  "use strict";
+
+  /* ---------------------------------------------------------
+     0. CONSTANTS / PRODUCT DATABASE
+  --------------------------------------------------------- */
+  const STORAGE_KEY = "shoppit_state_v1";
+
+  const PRODUCT_DB = [
+    { name: "Milk", category: "Dairy", price: 3.49 },
+    { name: "Eggs", category: "Dairy", price: 4.29 },
+    { name: "Butter", category: "Dairy", price: 4.99 },
+    { name: "Cheddar Cheese", category: "Dairy", price: 5.49 },
+    { name: "Greek Yogurt", category: "Dairy", price: 4.79 },
+    { name: "Bread", category: "Bakery", price: 3.29 },
+    { name: "Bagels", category: "Bakery", price: 3.99 },
+    { name: "Croissants", category: "Bakery", price: 4.49 },
+    { name: "Tortillas", category: "Bakery", price: 3.19 },
+    { name: "Bananas", category: "Produce", price: 1.49 },
+    { name: "Apples", category: "Produce", price: 2.99 },
+    { name: "Avocado", category: "Produce", price: 1.79 },
+    { name: "Tomatoes", category: "Produce", price: 2.49 },
+    { name: "Lettuce", category: "Produce", price: 1.99 },
+    { name: "Carrots", category: "Produce", price: 1.59 },
+    { name: "Onions", category: "Produce", price: 1.69 },
+    { name: "Potatoes", category: "Produce", price: 3.99 },
+    { name: "Broccoli", category: "Produce", price: 2.29 },
+    { name: "Strawberries", category: "Produce", price: 4.49 },
+    { name: "Chicken Breast", category: "Meat", price: 7.99 },
+    { name: "Ground Beef", category: "Meat", price: 6.49 },
+    { name: "Bacon", category: "Meat", price: 5.99 },
+    { name: "Salmon", category: "Meat", price: 9.99 },
+    { name: "Sausages", category: "Meat", price: 5.49 },
+    { name: "Rice", category: "Pantry", price: 4.29 },
+    { name: "Pasta", category: "Pantry", price: 1.99 },
+    { name: "Olive Oil", category: "Pantry", price: 8.49 },
+    { name: "Peanut Butter", category: "Pantry", price: 4.99 },
+    { name: "Cereal", category: "Pantry", price: 4.49 },
+    { name: "Coffee", category: "Pantry", price: 8.99 },
+    { name: "Canned Beans", category: "Pantry", price: 1.29 },
+    { name: "Flour", category: "Pantry", price: 3.49 },
+    { name: "Sugar", category: "Pantry", price: 2.99 },
+    { name: "Ketchup", category: "Pantry", price: 3.29 },
+    { name: "Ice Cream", category: "Frozen", price: 5.99 },
+    { name: "Frozen Pizza", category: "Frozen", price: 6.49 },
+    { name: "Frozen Peas", category: "Frozen", price: 2.49 },
+    { name: "Frozen Berries", category: "Frozen", price: 4.99 },
+    { name: "Paper Towels", category: "Household", price: 6.99 },
+    { name: "Toilet Paper", category: "Household", price: 8.99 },
+    { name: "Dish Soap", category: "Household", price: 3.49 },
+    { name: "Laundry Detergent", category: "Household", price: 9.99 },
+    { name: "Trash Bags", category: "Household", price: 5.49 },
+    { name: "Sponges", category: "Household", price: 2.99 }
+  ];
+
+  const CATEGORY_ORDER = ["Produce", "Dairy", "Bakery", "Meat", "Pantry", "Frozen", "Household", "Other"];
+
+  const SAVE_TIPS = [
+    "Buy store-brand items — they're often 20–30% cheaper with the same quality.",
+    "Shop with a list (like this one!) to avoid impulse buys that blow the budget.",
+    "Produce in season costs less and tastes better — check what's local this month.",
+    "Buying pantry staples like rice and pasta in bulk usually lowers the per-unit price.",
+    "Check unit price, not just the sticker price — bigger isn't always cheaper.",
+    "Frozen fruit and veg are just as nutritious as fresh and rarely go to waste.",
+    "Plan meals around what's on sale this week to cut your total spend.",
+    "Avoid shopping hungry — it's proven to increase impulse purchases.",
+    "Loyalty apps and digital coupons can add up to real savings over a month.",
+    "Cut down on pre-cut or pre-packaged produce — whole items are usually cheaper.",
+    "Generic medicine and household items work the same as name brands for less.",
+    "Batch-cook and freeze portions to avoid pricier last-minute takeout runs."
+  ];
+
+  const NUMBER_WORDS = {
+    zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+    eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
+    fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
+    nineteen: 19, twenty: 20, a: 1, an: 1, couple: 2, few: 3, dozen: 12
+  };
+
+  /* ---------------------------------------------------------
+     1. STATE
+  --------------------------------------------------------- */
+  let state = loadState();
+
+  function defaultState() {
+    return {
+      items: [],
+      budget: 0,
+      currency: "$",
+      theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+      voiceLang: "en-US",
+      history: {},
+      kids: { score: 0, streak: 0, best: 0 },
+      tipIndex: 0
+    };
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return defaultState();
+      const parsed = JSON.parse(raw);
+      return Object.assign(defaultState(), parsed);
+    } catch (e) {
+      return defaultState();
+    }
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.warn("Shoppit: could not save state", e);
+    }
+  }
+
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  /* ---------------------------------------------------------
+     2. DOM SHORTCUTS
+  --------------------------------------------------------- */
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+  const el = {
+    body: document.body,
+    budgetInput: $("#budgetInput"),
+    spentValue: $("#spentValue"),
+    remainingValue: $("#remainingValue"),
+    progressFill: $("#progressFill"),
+    progressTrack: $("#progressTrack"),
+    progressCaption: $("#progressCaption"),
+    tipBanner: $("#tipBanner"),
+    tipText: $("#tipText"),
+    tipNext: $("#tipNext"),
+    itemInput: $("#itemInput"),
+    suggestList: $("#suggestList"),
+    qtyValue: $("#qtyValue"),
+    qtyMinus: $("#qtyMinus"),
+    qtyPlus: $("#qtyPlus"),
+    priceInput: $("#priceInput"),
+    categorySelect: $("#categorySelect"),
+    btnAdd: $("#btnAdd"),
+    btnMic: $("#btnMic"),
+    listWrap: $("#listWrap"),
+    emptyState: $("#emptyState"),
+    countPill: $("#countPill"),
+    btnClearChecked: $("#btnClearChecked"),
+    toast: $("#toast"),
+    offlinePill: $("#offlinePill"),
+    btnDark: $("#btnDark"),
+    darkToggle: $("#darkToggle"),
+    currencySelect: $("#currencySelect"),
+    voiceLangSelect: $("#voiceLangSelect"),
+    btnResetKids: $("#btnResetKids"),
+    btnClearAll: $("#btnClearAll"),
+    kidsScore: $("#kidsScore"),
+    kidsStreak: $("#kidsStreak"),
+    kidsBest: $("#kidsBest")
+  };
+
+  let pendingQty = 1;
+
+  /* ---------------------------------------------------------
+     3. NAVIGATION (bottom tabs)
+  --------------------------------------------------------- */
+  $$(".nav-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $$(".nav-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const view = btn.dataset.view;
+      $$(".view").forEach((v) => v.classList.remove("active"));
+      $("#view-" + view).classList.add("active");
+    });
+  });
+
+  /* ---------------------------------------------------------
+     4. MODALS (generic open/close)
+  --------------------------------------------------------- */
+  function openModal(idOrEl) {
+    const m = typeof idOrEl === "string" ? $("#" + idOrEl) : idOrEl;
+    if (m) m.hidden = false;
+  }
+  function closeModal(idOrEl) {
+    const m = typeof idOrEl === "string" ? $("#" + idOrEl) : idOrEl;
+    if (m) m.hidden = true;
+  }
+  $$("[data-close]").forEach((btn) => {
+    btn.addEventListener("click", () => closeModal(btn.dataset.close));
+  });
+  $$(".modal-overlay").forEach((overlay) => {
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) overlay.hidden = true;
+    });
+  });
+
+  /* ---------------------------------------------------------
+     5. TOAST
+  --------------------------------------------------------- */
+  let toastTimer = null;
+  function toast(msg) {
+    el.toast.textContent = msg;
+    el.toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.toast.classList.remove("show"), 2400);
+  }
+
+  /* ---------------------------------------------------------
+     6. RENDER
+  --------------------------------------------------------- */
+  function currency(n) {
+    return state.currency + (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
+  }
+
+  function computeTotals() {
+    let spent = 0;
+    state.items.forEach((it) => (spent += (it.price || 0) * it.qty));
+    return spent;
+  }
+
+  function render() {
+    renderBudget();
+    renderList();
+    renderTip();
+    saveState();
+  }
+
+  function renderBudget() {
+    const spent = computeTotals();
+    const budget = Number(state.budget) || 0;
+    el.spentValue.textContent = currency(spent);
+    el.remainingValue.textContent = currency(Math.max(budget - spent, budget === 0 ? -spent : budget - spent));
+
+    let pct = budget > 0 ? (spent / budget) * 100 : spent > 0 ? 100 : 0;
+    pct = Math.max(0, Math.min(pct, 100));
+    el.progressFill.style.width = pct + "%";
+    el.progressTrack.setAttribute("aria-valuenow", Math.round(pct));
+
+    el.progressFill.classList.remove("warn", "over");
+    if (budget > 0 && spent > budget) {
+      el.progressFill.classList.add("over");
+      el.progressCaption.textContent = "You're " + currency(spent - budget) + " over budget.";
+    } else if (budget > 0 && spent / budget >= 0.8) {
+      el.progressFill.classList.add("warn");
+      el.progressCaption.textContent = "Getting close to your budget — nice tracking!";
+    } else if (budget > 0) {
+      el.progressCaption.textContent = currency(budget - spent) + " left to spend.";
+    } else {
+      el.progressCaption.textContent = state.items.length
+        ? "Set a budget above to track your spending."
+        : "Add items to see your budget fill up.";
+    }
+  }
+
+  function renderList() {
+    el.listWrap.querySelectorAll(".category-group").forEach((n) => n.remove());
+    const count = state.items.length;
+    el.countPill.textContent = count + (count === 1 ? " item" : " items");
+    el.emptyState.hidden = count > 0;
+    if (!count) return;
+
+    const groups = {};
+    state.items.forEach((it) => {
+      const cat = it.category || "Other";
+      (groups[cat] = groups[cat] || []).push(it);
+    });
+
+    CATEGORY_ORDER.forEach((cat) => {
+      if (!groups[cat]) return;
+      const wrap = document.createElement("div");
+      wrap.className = "category-group";
+      const title = document.createElement("p");
+      title.className = "category-title";
+      title.textContent = cat + " · " + groups[cat].length;
+      wrap.appendChild(title);
+
+      groups[cat]
+        .sort((a, b) => a.checked - b.checked)
+        .forEach((it) => wrap.appendChild(renderItemRow(it)));
+
+      el.listWrap.appendChild(wrap);
+    });
+  }
+
+  function renderItemRow(it) {
+    const row = document.createElement("div");
+    row.className = "item-row" + (it.checked ? " checked" : "");
+    row.dataset.id = it.id;
+
+    row.innerHTML =
+      '<button class="check-btn" aria-label="Mark ' + escapeHtml(it.name) + ' as picked up">' +
+        (it.checked ? "✓" : "") +
+      "</button>" +
+      '<div class="item-main">' +
+        '<p class="item-name">' + escapeHtml(it.name) + "</p>" +
+        '<p class="item-meta">' + (it.price ? currency(it.price) + " each" : "no price set") + "</p>" +
+      "</div>" +
+      '<div class="item-stepper">' +
+        '<button class="row-minus" aria-label="Decrease quantity">−</button>' +
+        "<span>" + it.qty + "</span>" +
+        '<button class="row-plus" aria-label="Increase quantity">+</button>' +
+      "</div>" +
+      '<div class="item-price">' + currency((it.price || 0) * it.qty) + "</div>" +
+      '<button class="item-delete" aria-label="Remove ' + escapeHtml(it.name) + '">✕</button>';
+
+    row.querySelector(".check-btn").addEventListener("click", () => toggleCheck(it.id));
+    row.querySelector(".row-minus").addEventListener("click", () => changeQty(it.id, -1));
+    row.querySelector(".row-plus").addEventListener("click", () => changeQty(it.id, 1));
+    row.querySelector(".item-delete").addEventListener("click", () => deleteItem(it.id));
+    return row;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  /* ---------------------------------------------------------
+     7. ITEM ACTIONS
+  --------------------------------------------------------- */
+  function addItem(name, qty, price, category) {
+    name = (name || "").trim();
+    if (!name) return;
+    qty = Math.max(1, Math.round(qty) || 1);
+    price = isNaN(parseFloat(price)) ? matchProduct(name)?.price || 0 : parseFloat(price);
+    category = category || matchProduct(name)?.category || "Other";
+
+    const existing = state.items.find(
+      (it) => it.name.toLowerCase() === name.toLowerCase() && !it.checked
+    );
+    if (existing) {
+      existing.qty += qty;
+    } else {
+      state.items.push({
+        id: uid(), name, qty, price, category, checked: false, createdAt: Date.now()
+      });
+    }
+    state.history[name.toLowerCase()] = (state.history[name.toLowerCase()] || 0) + 1;
+    render();
+    toast(name + " added to your list");
+  }
+
+  function matchProduct(name) {
+    const n = name.toLowerCase();
+    return PRODUCT_DB.find((p) => p.name.toLowerCase() === n) ||
+      PRODUCT_DB.find((p) => p.name.toLowerCase().includes(n) || n.includes(p.name.toLowerCase()));
+  }
+
+  function toggleCheck(id) {
+    const it = state.items.find((i) => i.id === id);
+    if (it) { it.checked = !it.checked; render(); }
+  }
+  function changeQty(id, delta) {
+    const it = state.items.find((i) => i.id === id);
+    if (it) { it.qty = Math.max(1, it.qty + delta); render(); }
+  }
+  function deleteItem(id) {
+    state.items = state.items.filter((i) => i.id !== id);
+    render();
+  }
+
+  el.btnClearChecked.addEventListener("click", () => {
+    const before = state.items.length;
+    state.items = state.items.filter((i) => !i.checked);
+    if (state.items.length !== before) toast("Checked items cleared");
+    render();
+  });
+
+  el.btnClearAll.addEventListener("click", () => {
+    if (!state.items.length) return toast("List already empty");
+    if (confirm("Clear your entire list? This can't be undone.")) {
+      state.items = [];
+      render();
+      toast("List cleared");
+    }
+  });
+
+  /* ---------------------------------------------------------
+     8. ADD FORM (quantity stepper, predictive suggestions)
+  --------------------------------------------------------- */
+  el.qtyMinus.addEventListener("click", () => {
+    pendingQty = Math.max(1, pendingQty - 1);
+    el.qtyValue.textContent = pendingQty;
+  });
+  el.qtyPlus.addEventListener("click", () => {
+    pendingQty = Math.min(99, pendingQty + 1);
+    el.qtyValue.textContent = pendingQty;
+  });
+
+  el.btnAdd.addEventListener("click", submitAddForm);
+  el.itemInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); submitAddForm(); }
+    if (e.key === "ArrowDown") { e.preventDefault(); moveSuggestFocus(1); }
+    if (e.key === "ArrowUp") { e.preventDefault(); moveSuggestFocus(-1); }
+    if (e.key === "Escape") hideSuggestions();
+  });
+
+  function submitAddForm() {
+    const name = el.itemInput.value.trim();
+    if (!name) { el.itemInput.focus(); return; }
+    addItem(name, pendingQty, el.priceInput.value, el.categorySelect.value);
+    el.itemInput.value = "";
+    el.priceInput.value = "";
+    pendingQty = 1;
+    el.qtyValue.textContent = 1;
+    hideSuggestions();
+    el.itemInput.focus();
+  }
+
+  // --- Predictive shopping items ---
+  let suggestIndex = -1;
+  el.itemInput.addEventListener("input", () => renderSuggestions(el.itemInput.value));
+  el.itemInput.addEventListener("focus", () => renderSuggestions(el.itemInput.value));
+  document.addEventListener("click", (e) => {
+    if (!el.suggestList.contains(e.target) && e.target !== el.itemInput) hideSuggestions();
+  });
+
+  function getSuggestions(query) {
+    query = (query || "").trim().toLowerCase();
+    const scored = PRODUCT_DB.map((p) => {
+      const freq = state.history[p.name.toLowerCase()] || 0;
+      let score = -1;
+      const n = p.name.toLowerCase();
+      if (!query) score = freq;
+      else if (n.startsWith(query)) score = 100 + freq;
+      else if (n.includes(query)) score = 50 + freq;
+      return { p, score };
+    }).filter((s) => s.score >= 0);
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 6).map((s) => s.p);
+  }
+
+  function renderSuggestions(query) {
+    const list = getSuggestions(query);
+    if (!list.length) return hideSuggestions();
+    el.suggestList.innerHTML = "";
+    list.forEach((p, i) => {
+      const li = document.createElement("li");
+      li.className = "suggest-item";
+      li.setAttribute("role", "option");
+      li.innerHTML = "<span>" + escapeHtml(p.name) + "</span><small>" + p.category + "</small>";
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        el.priceInput.value = p.price.toFixed(2);
+        el.categorySelect.value = p.category;
+        el.itemInput.value = p.name;
+        hideSuggestions();
+        el.itemInput.focus();
+      });
+      el.suggestList.appendChild(li);
+    });
+    suggestIndex = -1;
+    el.suggestList.hidden = false;
+    el.itemInput.setAttribute("aria-expanded", "true");
+  }
+
+  function moveSuggestFocus(dir) {
+    const items = $$(".suggest-item");
+    if (!items.length) return;
+    items[suggestIndex]?.classList.remove("active");
+    suggestIndex = (suggestIndex + dir + items.length) % items.length;
+    items[suggestIndex].classList.add("active");
+    items[suggestIndex].scrollIntoView({ block: "nearest" });
+  }
+
+  function hideSuggestions() {
+    el.suggestList.hidden = true;
+    el.itemInput.setAttribute("aria-expanded", "false");
+  }
+
+  /* ---------------------------------------------------------
+     9. SMART SAVE TIPS
+  --------------------------------------------------------- */
+  function renderTip() {
+    if (!state.items.length) { el.tipBanner.hidden = true; return; }
+    el.tipBanner.hidden = false;
+    el.tipText.textContent = SAVE_TIPS[state.tipIndex % SAVE_TIPS.length];
+  }
+  el.tipNext.addEventListener("click", () => {
+    state.tipIndex = (state.tipIndex + 1) % SAVE_TIPS.length;
+    renderTip();
+    saveState();
+  });
+
+  /* ---------------------------------------------------------
+     10. VOICE RECOGNITION
+  --------------------------------------------------------- */
+  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null;
+  let listening = false;
+
+  if (SpeechRecognitionAPI) {
+    recognition = new SpeechRecognitionAPI();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.addEventListener("result", (e) => {
+      const transcript = e.results[0][0].transcript;
+      handleVoiceTranscript(transcript);
+    });
+    recognition.addEventListener("end", () => setListening(false));
+    recognition.addEventListener("error", (e) => {
+      setListening(false);
+      if (e.error !== "no-speech") toast("Voice input error: " + e.error);
+    });
+  } else {
+    el.btnMic.addEventListener("click", () =>
+      toast("Voice input isn't supported in this browser")
+    );
+  }
+
+  function setListening(val) {
+    listening = val;
+    el.btnMic.classList.toggle("listening", val);
+    el.btnMic.textContent = val ? "●" : "🎤";
+  }
+
+  if (recognition) {
+    el.btnMic.addEventListener("click", () => {
+      if (listening) { recognition.stop(); return; }
+      try {
+        recognition.lang = state.voiceLang;
+        recognition.start();
+        setListening(true);
+        toast("Listening… say something like “add two apples”");
+      } catch (e) { /* already started */ }
+    });
+  }
+
+  function handleVoiceTranscript(raw) {
+    let text = raw.toLowerCase().trim();
+    text = text.replace(/^(please\s+)?(add|buy|get|put|i need|we need)\s+/i, "");
+    text = text.replace(/\s+(to (the|my) list)$/i, "");
+
+    let qty = 1;
+    const words = text.split(/\s+/);
+    if (words.length && (/^\d+$/.test(words[0]) || NUMBER_WORDS.hasOwnProperty(words[0]))) {
+      qty = /^\d+$/.test(words[0]) ? parseInt(words[0], 10) : NUMBER_WORDS[words[0]];
+      words.shift();
+    }
+    let name = words.join(" ").replace(/^(of\s+)/, "").trim();
+    name = name.replace(/s$/, (m, offset, str) => {
+      // keep plural if it matches a product with trailing s intentionally, else strip for singular match
+      return str;
+    });
+
+    if (!name) { toast("Didn't catch an item name — try again"); return; }
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+
+    const product = matchProduct(name);
+    addItem(name, qty, product ? product.price : "", product ? product.category : "Other");
+  }
+
+  /* ---------------------------------------------------------
+     11. BUDGET INPUT
+  --------------------------------------------------------- */
+  el.budgetInput.addEventListener("input", () => {
+    state.budget = parseFloat(el.budgetInput.value) || 0;
+    renderBudget();
+    saveState();
+  });
+  el.budgetInput.value = state.budget || "";
+
+  /* ---------------------------------------------------------
+     12. DARK MODE
+  --------------------------------------------------------- */
+  function applyTheme() {
+    el.body.setAttribute("data-theme", state.theme);
+    el.darkToggle.checked = state.theme === "dark";
+    el.btnDark.classList.toggle("active-toggle", state.theme === "dark");
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", state.theme === "dark" ? "#1F1430" : "#FF5DA2");
+  }
+  function toggleTheme() {
+    state.theme = state.theme === "dark" ? "light" : "dark";
+    applyTheme();
+    saveState();
+  }
+  el.btnDark.addEventListener("click", toggleTheme);
+  el.darkToggle.addEventListener("change", toggleTheme);
+
+  /* ---------------------------------------------------------
+     13. SETTINGS: currency / voice lang / resets
+  --------------------------------------------------------- */
+  el.currencySelect.value = state.currency;
+  el.currencySelect.addEventListener("change", () => {
+    state.currency = el.currencySelect.value;
+    render();
+  });
+  el.voiceLangSelect.value = state.voiceLang;
+  el.voiceLangSelect.addEventListener("change", () => {
+    state.voiceLang = el.voiceLangSelect.value;
+    saveState();
+  });
+  el.btnResetKids.addEventListener("click", () => {
+    state.kids = { score: 0, streak: 0, best: 0 };
+    renderKidsStats();
+    saveState();
+    toast("Kids+ progress reset");
+  });
+
+  /* ---------------------------------------------------------
+     14. KIDS+ MATHS QUIZ (hundreds of procedurally generated Qs)
+  --------------------------------------------------------- */
+  const kidsEl = {
+    grid: $("#levelGrid"),
+    card: $("#quizCard"),
+    levelPill: $("#quizLevelPill"),
+    question: $("#quizQuestion"),
+    answers: $("#quizAnswers"),
+    feedback: $("#quizFeedback"),
+    exit: $("#btnQuizExit")
+  };
+  const LEVELS = {
+    easy: { label: "Sweet Start", ops: ["+", "-"], max: 10 },
+    medium: { label: "Sugar Rush", ops: ["+", "-", "×"], max: 50 },
+    hard: { label: "Candy Genius", ops: ["+", "-", "×", "÷"], max: 100 }
+  };
+  let currentLevel = "easy";
+  let currentAnswer = null;
+  let answerLock = false;
+
+  kidsEl.grid.addEventListener("click", (e) => {
+    const card = e.target.closest(".level-card");
+    if (!card) return;
+    currentLevel = card.dataset.level;
+    kidsEl.card.hidden = false;
+    kidsEl.levelPill.textContent = LEVELS[currentLevel].label;
+    nextQuestion();
+  });
+  kidsEl.exit.addEventListener("click", () => { kidsEl.card.hidden = true; });
+
+  function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+  function generateQuestion(levelKey) {
+    const level = LEVELS[levelKey];
+    const op = level.ops[randInt(0, level.ops.length - 1)];
+    let a, b, answer;
+    switch (op) {
+      case "+":
+        a = randInt(1, level.max); b = randInt(1, level.max);
+        answer = a + b;
+        break;
+      case "-":
+        a = randInt(1, level.max); b = randInt(0, a);
+        answer = a - b;
+        break;
+      case "×":
+        a = randInt(1, Math.min(12, level.max)); b = randInt(1, Math.min(12, level.max));
+        answer = a * b;
+        break;
+      case "÷":
+        b = randInt(2, 12); answer = randInt(1, 12); a = b * answer;
+        break;
+    }
+    return { text: a + " " + op + " " + b + " = ?", answer };
+  }
+
+  function generateChoices(answer) {
+    const choices = new Set([answer]);
+    let guardrail = 0;
+    while (choices.size < 4 && guardrail < 50) {
+      guardrail++;
+      const spread = Math.max(2, Math.round(Math.abs(answer) * 0.25) + randInt(1, 4));
+      const wrong = answer + (randInt(0, 1) ? 1 : -1) * randInt(1, spread);
+      if (wrong !== answer && wrong >= 0) choices.add(wrong);
+    }
+    return shuffle(Array.from(choices));
+  }
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = randInt(0, i);
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function nextQuestion() {
+    answerLock = false;
+    kidsEl.feedback.textContent = "\u00A0";
+    const q = generateQuestion(currentLevel);
+    currentAnswer = q.answer;
+    kidsEl.question.textContent = q.text;
+    kidsEl.answers.innerHTML = "";
+    generateChoices(q.answer).forEach((choice) => {
+      const btn = document.createElement("button");
+      btn.className = "quiz-answer-btn";
+      btn.textContent = choice;
+      btn.addEventListener("click", () => handleAnswer(choice, btn));
+      kidsEl.answers.appendChild(btn);
+    });
+  }
+
+  function handleAnswer(choice, btn) {
+    if (answerLock) return;
+    answerLock = true;
+    const correct = choice === currentAnswer;
+    btn.classList.add(correct ? "correct" : "wrong");
+    if (correct) {
+      state.kids.score += 10;
+      state.kids.streak += 1;
+      state.kids.best = Math.max(state.kids.best, state.kids.streak);
+      kidsEl.feedback.textContent = "Correct! 🎉 +10 points";
+    } else {
+      state.kids.streak = 0;
+      kidsEl.feedback.textContent = "Not quite — the answer was " + currentAnswer;
+      $$(".quiz-answer-btn", kidsEl.answers).forEach((b) => {
+        if (Number(b.textContent) === currentAnswer) b.classList.add("correct");
+      });
+    }
+    renderKidsStats();
+    saveState();
+    setTimeout(nextQuestion, 1100);
+  }
+
+  function renderKidsStats() {
+    el.kidsScore.textContent = state.kids.score;
+    el.kidsStreak.textContent = state.kids.streak;
+    el.kidsBest.textContent = state.kids.best;
+  }
+
+  /* ---------------------------------------------------------
+     15. SCANNER + CONFIRMATION MODAL
+  --------------------------------------------------------- */
+  const CATEGORY_EMOJI = {
+    Produce: "🥦", Dairy: "🥛", Bakery: "🍞", Meat: "🍗",
+    Pantry: "🥫", Frozen: "🧊", Household: "🧻", Other: "✨"
+  };
+  let lastScanned = null;
+
+  $("#btnScan").addEventListener("click", () => openModal("scanModal"));
+  $("#btnScanNow").addEventListener("click", () => {
+    const product = PRODUCT_DB[randInt(0, PRODUCT_DB.length - 1)];
+    const price = Math.max(0.5, product.price + (Math.random() * 1 - 0.5)).toFixed(2);
+    lastScanned = { name: product.name, category: product.category, price: parseFloat(price) };
+
+    $("#scanResultEmoji").textContent = CATEGORY_EMOJI[product.category] || "🛒";
+    $("#scanResultName").textContent = lastScanned.name;
+    $("#scanResultPrice").textContent = currency(lastScanned.price);
+
+    closeModal("scanModal");
+    openModal("scanConfirmModal");
+  });
+  $("#btnScanReject").addEventListener("click", () => {
+    closeModal("scanConfirmModal");
+    openModal("scanModal");
+  });
+  $("#btnScanConfirm").addEventListener("click", () => {
+    if (lastScanned) addItem(lastScanned.name, 1, lastScanned.price, lastScanned.category);
+    closeModal("scanConfirmModal");
+  });
+
+  /* ---------------------------------------------------------
+     16. TIMER
+  --------------------------------------------------------- */
+  const timerEl = {
+    display: $("#timerDisplay"),
+    ring: $("#timerRingFg"),
+    toggle: $("#btnTimerToggle"),
+    reset: $("#btnTimerReset"),
+    chips: $$(".chip")
+  };
+  const RING_CIRC = 2 * Math.PI * 52;
+  let timerTotal = 300;
+  let timerRemaining = 300;
+  let timerInterval = null;
+  let timerRunning = false;
+
+  timerEl.ring.style.strokeDasharray = RING_CIRC;
+
+  $("#btnTimer").addEventListener("click", () => { openModal("timerModal"); updateTimerUI(); });
+
+  timerEl.chips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      timerEl.chips.forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      timerTotal = parseInt(chip.dataset.mins, 10) * 60;
+      timerRemaining = timerTotal;
+      stopTimer();
+      updateTimerUI();
+    });
+  });
+
+  timerEl.toggle.addEventListener("click", () => {
+    timerRunning ? stopTimer() : startTimer();
+  });
+  timerEl.reset.addEventListener("click", () => {
+    stopTimer();
+    timerRemaining = timerTotal;
+    updateTimerUI();
+  });
+
+  function startTimer() {
+    if (timerRemaining <= 0) timerRemaining = timerTotal;
+    timerRunning = true;
+    timerEl.toggle.textContent = "Pause";
+    timerInterval = setInterval(() => {
+      timerRemaining--;
+      updateTimerUI();
+      if (timerRemaining <= 0) {
+        stopTimer();
+        toast("⏰ Timer's up!");
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      }
+    }, 1000);
+  }
+  function stopTimer() {
+    timerRunning = false;
+    timerEl.toggle.textContent = "Start";
+    clearInterval(timerInterval);
+  }
+  function updateTimerUI() {
+    const mins = Math.floor(Math.max(timerRemaining, 0) / 60).toString().padStart(2, "0");
+    const secs = Math.max(timerRemaining, 0) % 60;
+    timerEl.display.textContent = mins + ":" + secs.toString().padStart(2, "0");
+    const pct = timerTotal ? timerRemaining / timerTotal : 0;
+    timerEl.ring.style.strokeDashoffset = RING_CIRC * (1 - pct);
+  }
+  updateTimerUI();
+
+  /* ---------------------------------------------------------
+     17. EXPORT / SHARE
+  --------------------------------------------------------- */
+  $("#btnExport").addEventListener("click", () => {
+    $("#exportPreview").value = buildExportText();
+    openModal("exportModal");
+  });
+
+  function buildExportText() {
+    const lines = ["🛒 Shoppit list", ""];
+    const groups = {};
+    state.items.forEach((it) => { (groups[it.category] = groups[it.category] || []).push(it); });
+    CATEGORY_ORDER.forEach((cat) => {
+      if (!groups[cat]) return;
+      lines.push(cat + ":");
+      groups[cat].forEach((it) => {
+        lines.push(
+          (it.checked ? "  [x] " : "  [ ] ") + it.qty + "x " + it.name +
+          (it.price ? " — " + currency(it.price * it.qty) : "")
+        );
+      });
+      lines.push("");
+    });
+    const spent = computeTotals();
+    lines.push("Total: " + currency(spent));
+    if (state.budget) lines.push("Budget: " + currency(state.budget));
+    return lines.join("\n");
+  }
+
+  $("#btnShareNative").addEventListener("click", async () => {
+    const text = buildExportText();
+    if (navigator.share) {
+      try { await navigator.share({ title: "Shoppit list", text }); }
+      catch (e) { /* user cancelled */ }
+    } else {
+      toast("Sharing isn't supported here — try download or copy instead");
+    }
+  });
+  $("#btnDownloadTxt").addEventListener("click", () => downloadFile("shoppit-list.txt", buildExportText(), "text/plain"));
+  $("#btnDownloadJson").addEventListener("click", () =>
+    downloadFile("shoppit-list.json", JSON.stringify(state.items, null, 2), "application/json")
+  );
+  $("#btnCopyList").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(buildExportText()); toast("Copied to clipboard"); }
+    catch (e) { toast("Couldn't copy — try download instead"); }
+  });
+
+  function downloadFile(filename, content, mime) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast("Downloaded " + filename);
+  }
+
+  /* ---------------------------------------------------------
+     18. OFFLINE DETECTION
+  --------------------------------------------------------- */
+  function updateOnlineStatus() { el.offlinePill.hidden = navigator.onLine; }
+  window.addEventListener("online", updateOnlineStatus);
+  window.addEventListener("offline", updateOnlineStatus);
+
+  /* ---------------------------------------------------------
+     19. PWA SERVICE WORKER
+  --------------------------------------------------------- */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js").catch((err) => {
+        console.warn("Shoppit: service worker registration failed", err);
+      });
+    });
+  }
+
+  /* ---------------------------------------------------------
+     20. INIT
+  --------------------------------------------------------- */
+  function init() {
+    applyTheme();
+    updateOnlineStatus();
+    renderKidsStats();
+    render();
+  }
+  init();
+})();

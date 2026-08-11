@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Shoppit — Smart Shopping List</title>
+<meta name="description" content="Shoppit: a candy-glazed, voice-powered shopping list with budget tracking, offline storage and a Kids+ math corner.">
+<meta name="theme-color" content="#FF5DA2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shoppit">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9B%92%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9B%92%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="light">
+
+<div class="chrome-shell" id="app">
+
+  <!-- ===== HEADER ===== -->
+  <header class="topbar glass chrome-strip">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">🛒</span>
+      <h1>Shoppit<span class="brand-dot">.</span></h1>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="btnTimer" aria-label="Open timer" title="Timer">⏱</button>
+      <button class="icon-btn" id="btnScan" aria-label="Scan a barcode" title="Scan">▤</button>
+      <button class="icon-btn" id="btnExport" aria-label="Export or share list" title="Export / Share">⇪</button>
+      <button class="icon-btn" id="btnDark" aria-label="Toggle dark mode" title="Dark mode">☾</button>
+    </div>
+  </header>
+
+  <!-- ===== OFFLINE PILL ===== -->
+  <div class="offline-pill" id="offlinePill" hidden>You're offline — Shoppit still works, changes are saved on this device.</div>
+
+  <!-- ===== MAIN VIEWS ===== -->
+  <main class="views">
+
+    <!-- ---------- SHOPPING VIEW ---------- -->
+    <section class="view active" id="view-shopping" aria-labelledby="view-shopping-tab">
+
+      <!-- Budget card -->
+      <div class="card glass budget-card">
+        <div class="budget-head">
+          <div>
+            <p class="eyebrow">Budget this trip</p>
+            <div class="budget-edit">
+              <span class="currency">$</span>
+              <input type="number" id="budgetInput" inputmode="decimal" min="0" step="1" placeholder="0.00" aria-label="Set your budget">
+            </div>
+          </div>
+          <div class="budget-figures">
+            <div>
+              <p class="fig-value" id="spentValue">$0.00</p>
+              <p class="fig-label">spent</p>
+            </div>
+            <div>
+              <p class="fig-value" id="remainingValue">$0.00</p>
+              <p class="fig-label">left</p>
+            </div>
+          </div>
+        </div>
+        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressTrack">
+          <div class="progress-fill" id="progressFill"></div>
+          <div class="progress-sheen"></div>
+        </div>
+        <p class="progress-caption" id="progressCaption">Add items to see your budget fill up.</p>
+      </div>
+
+      <!-- Smart Save Tips -->
+      <div class="tip-banner glass" id="tipBanner" hidden>
+        <span class="tip-icon" aria-hidden="true">💡</span>
+        <p id="tipText">Tip goes here</p>
+        <button class="tip-next" id="tipNext" aria-label="Next tip">›</button>
+      </div>
+
+      <!-- Add item bar -->
+      <div class="card glass add-card">
+        <div class="add-row">
+          <div class="add-input-wrap">
+            <input type="text" id="itemInput" placeholder="Add milk, eggs, bread…" autocomplete="off" aria-label="Item name" aria-expanded="false" aria-controls="suggestList">
+            <ul class="suggest-list" id="suggestList" hidden></ul>
+          </div>
+          <button class="icon-btn mic-btn" id="btnMic" aria-label="Add item by voice" title="Voice add">🎤</button>
+        </div>
+        <div class="add-row add-row-secondary">
+          <div class="stepper" id="qtyStepper">
+            <button type="button" class="stepper-btn" id="qtyMinus" aria-label="Decrease quantity">−</button>
+            <span id="qtyValue">1</span>
+            <button type="button" class="stepper-btn" id="qtyPlus" aria-label="Increase quantity">+</button>
+          </div>
+          <input type="number" id="priceInput" class="price-input" inputmode="decimal" min="0" step="0.01" placeholder="Price $">
+          <select id="categorySelect" aria-label="Category">
+            <option value="Produce">🥦 Produce</option>
+            <option value="Dairy">🥛 Dairy</option>
+            <option value="Bakery">🍞 Bakery</option>
+            <option value="Meat">🍗 Meat</option>
+            <option value="Pantry">🥫 Pantry</option>
+            <option value="Frozen">🧊 Frozen</option>
+            <option value="Household">🧻 Household</option>
+            <option value="Other">✨ Other</option>
+          </select>
+          <button class="btn-primary" id="btnAdd">Add</button>
+        </div>
+      </div>
+
+      <!-- List -->
+      <div class="list-head">
+        <h2>Your list</h2>
+        <div class="list-head-actions">
+          <span class="count-pill" id="countPill">0 items</span>
+          <button class="text-btn" id="btnClearChecked">Clear checked</button>
+        </div>
+      </div>
+
+      <div class="list-wrap" id="listWrap">
+        <div class="empty-state" id="emptyState">
+          <p class="empty-emoji">🍭</p>
+          <p>Your list is empty. Add something above, or try the mic.</p>
+        </div>
+        <!-- item groups injected by JS -->
+      </div>
+    </section>
+
+    <!-- ---------- KIDS+ VIEW ---------- -->
+    <section class="view" id="view-kids" aria-labelledby="view-kids-tab">
+      <div class="card glass kids-hero">
+        <p class="eyebrow">Kids+</p>
+        <h2>Maths at the checkout</h2>
+        <p class="kids-sub">Hundreds of questions while grown-ups shop. Pick a level to start.</p>
+        <div class="kids-stats">
+          <div><span id="kidsScore">0</span><small>Score</small></div>
+          <div><span id="kidsStreak">0</span><small>Streak</small></div>
+          <div><span id="kidsBest">0</span><small>Best streak</small></div>
+        </div>
+      </div>
+
+      <div class="level-grid" id="levelGrid">
+        <button class="level-card glass" data-level="easy">
+          <span class="level-emoji">🍬</span>
+          <span class="level-name">Sweet Start</span>
+          <span class="level-desc">+ and − up to 10</span>
+        </button>
+        <button class="level-card glass" data-level="medium">
+          <span class="level-emoji">🍩</span>
+          <span class="level-name">Sugar Rush</span>
+          <span class="level-desc">+ − × up to 50</span>
+        </button>
+        <button class="level-card glass" data-level="hard">
+          <span class="level-emoji">🍰</span>
+          <span class="level-name">Candy Genius</span>
+          <span class="level-desc">All ops, up to 100</span>
+        </button>
+      </div>
+
+      <div class="card glass quiz-card" id="quizCard" hidden>
+        <div class="quiz-top">
+          <span class="quiz-level-pill" id="quizLevelPill">Sweet Start</span>
+          <button class="text-btn" id="btnQuizExit">Exit</button>
+        </div>
+        <p class="quiz-question" id="quizQuestion">3 + 4 = ?</p>
+        <div class="quiz-answers" id="quizAnswers"></div>
+        <p class="quiz-feedback" id="quizFeedback" aria-live="polite">&nbsp;</p>
+      </div>
+    </section>
+
+    <!-- ---------- SETTINGS VIEW ---------- -->
+    <section class="view" id="view-settings" aria-labelledby="view-settings-tab">
+      <div class="card glass">
+        <h2>Settings</h2>
+
+        <div class="setting-row">
+          <div>
+            <p class="setting-title">Dark mode</p>
+            <p class="setting-sub">Easier on the eyes in the aisles at night.</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="darkToggle">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <p class="setting-title">Currency symbol</p>
+            <p class="setting-sub">Used across budget and prices.</p>
+          </div>
+          <select id="currencySelect">
+            <option value="$">$ Dollar</option>
+            <option value="€">€ Euro</option>
+            <option value="£">£ Pound</option>
+            <option value="¥">¥ Yen</option>
+            <option value="₹">₹ Rupee</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <p class="setting-title">Voice language</p>
+            <p class="setting-sub">Used for voice add recognition.</p>
+          </div>
+          <select id="voiceLangSelect">
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="en-NZ">English (NZ)</option>
+            <option value="en-AU">English (AU)</option>
+            <option value="es-ES">Español</option>
+            <option value="fr-FR">Français</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <p class="setting-title">Reset Kids+ progress</p>
+            <p class="setting-sub">Clears score, streak and best streak.</p>
+          </div>
+          <button class="text-btn danger" id="btnResetKids">Reset</button>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <p class="setting-title">Clear entire list</p>
+            <p class="setting-sub">Removes every item. Can't be undone.</p>
+          </div>
+          <button class="text-btn danger" id="btnClearAll">Clear list</button>
+        </div>
+
+        <p class="app-version">Shoppit v1.0 · works offline · installable on Android &amp; iOS</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== BOTTOM NAV ===== -->
+  <nav class="bottom-nav glass chrome-strip">
+    <button class="nav-btn active" data-view="shopping" id="view-shopping-tab">
+      <span class="nav-icon">🛍️</span><span>List</span>
+    </button>
+    <button class="nav-btn" data-view="kids" id="view-kids-tab">
+      <span class="nav-icon">🎈</span><span>Kids+</span>
+    </button>
+    <button class="nav-btn" data-view="settings" id="view-settings-tab">
+      <span class="nav-icon">⚙️</span><span>Settings</span>
+    </button>
+  </nav>
+
+</div>
+
+<!-- ===== MODAL: TIMER ===== -->
+<div class="modal-overlay" id="timerModal" hidden>
+  <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="timerTitle">
+    <button class="modal-close" data-close="timerModal" aria-label="Close timer">✕</button>
+    <h3 id="timerTitle">Shopping Timer</h3>
+    <div class="timer-ring-wrap">
+      <svg class="timer-ring" viewBox="0 0 120 120">
+        <circle class="timer-ring-bg" cx="60" cy="60" r="52"></circle>
+        <circle class="timer-ring-fg" id="timerRingFg" cx="60" cy="60" r="52"></circle>
+      </svg>
+      <div class="timer-display" id="timerDisplay">05:00</div>
+    </div>
+    <div class="timer-presets">
+      <button class="chip" data-mins="5">5 min</button>
+      <button class="chip" data-mins="10">10 min</button>
+      <button class="chip" data-mins="20">20 min</button>
+      <button class="chip" data-mins="30">30 min</button>
+    </div>
+    <div class="timer-controls">
+      <button class="btn-secondary" id="btnTimerReset">Reset</button>
+      <button class="btn-primary" id="btnTimerToggle">Start</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: SCANNER ===== -->
+<div class="modal-overlay" id="scanModal" hidden>
+  <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="scanTitle">
+    <button class="modal-close" data-close="scanModal" aria-label="Close scanner">✕</button>
+    <h3 id="scanTitle">Scan a barcode</h3>
+    <div class="scan-frame">
+      <div class="scan-laser"></div>
+      <span class="scan-emoji">📦</span>
+    </div>
+    <p class="scan-hint" id="scanHint">Point your camera at a barcode, or tap scan to simulate a find.</p>
+    <button class="btn-primary" id="btnScanNow">Scan now</button>
+  </div>
+</div>
+
+<!-- ===== MODAL: SCAN CONFIRM ===== -->
+<div class="modal-overlay" id="scanConfirmModal" hidden>
+  <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="scanConfirmTitle">
+    <button class="modal-close" data-close="scanConfirmModal" aria-label="Close">✕</button>
+    <h3 id="scanConfirmTitle">Is this right?</h3>
+    <div class="scan-result-card">
+      <span class="scan-result-emoji" id="scanResultEmoji">🥫</span>
+      <div>
+        <p class="scan-result-name" id="scanResultName">Item name</p>
+        <p class="scan-result-price" id="scanResultPrice">$0.00</p>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btnScanReject">Not it, rescan</button>
+      <button class="btn-primary" id="btnScanConfirm">Add to list</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: EXPORT / SHARE ===== -->
+<div class="modal-overlay" id="exportModal" hidden>
+  <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+    <button class="modal-close" data-close="exportModal" aria-label="Close export">✕</button>
+    <h3 id="exportTitle">Export &amp; share</h3>
+    <p class="scan-hint">Send your list as text, or save a copy to this device.</p>
+    <div class="export-actions">
+      <button class="btn-primary" id="btnShareNative">Share list</button>
+      <button class="btn-secondary" id="btnDownloadTxt">Download .txt</button>
+      <button class="btn-secondary" id="btnDownloadJson">Download .json</button>
+      <button class="btn-secondary" id="btnCopyList">Copy to clipboard</button>
+    </div>
+    <textarea class="export-preview" id="exportPreview" readonly aria-label="List preview"></textarea>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
