@@ -24,13 +24,13 @@
   <!-- ===== HEADER ===== -->
   <header class="topbar glass chrome-strip">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true">🛒</span>
-      <h1>Shoppit<span class="brand-dot">.</span></h1>
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1>Shoppit<span class="brand-dot">🖋</span></h1>
     </div>
     <div class="topbar-actions">
-      <button class="icon-btn" id="btnTimer" aria-label="Open timer" title="Timer">⏱</button>
+      <button class="icon-btn" id="btnTimer" aria-label="Open timer" title="Timer">🕔</button>
       <button class="icon-btn" id="btnScan" aria-label="Scan a barcode" title="Scan">▤</button>
-      <button class="icon-btn" id="btnExport" aria-label="Export or share list" title="Export / Share">⇪</button>
+      <button class="icon-btn" id="btnExport" aria-label="Export or share list" title="Export / Share">⮣</button>
       <button class="icon-btn" id="btnDark" aria-label="Toggle dark mode" title="Dark mode">☾</button>
     </div>
   </header>
@@ -86,7 +86,7 @@
             <input type="text" id="itemInput" placeholder="Add milk, eggs, bread…" autocomplete="off" aria-label="Item name" aria-expanded="false" aria-controls="suggestList">
             <ul class="suggest-list" id="suggestList" hidden></ul>
           </div>
-          <button class="icon-btn mic-btn" id="btnMic" aria-label="Add item by voice" title="Voice add">🎤</button>
+          <button class="icon-btn mic-btn" id="btnMic" aria-label="Add item by voice" title="Voice add">💬</button>
         </div>
         <div class="add-row add-row-secondary">
           <div class="stepper" id="qtyStepper">
@@ -96,13 +96,13 @@
           </div>
           <input type="number" id="priceInput" class="price-input" inputmode="decimal" min="0" step="0.01" placeholder="Price $">
           <select id="categorySelect" aria-label="Category">
-            <option value="Produce">🥦 Produce</option>
-            <option value="Dairy">🥛 Dairy</option>
-            <option value="Bakery">🍞 Bakery</option>
-            <option value="Meat">🍗 Meat</option>
-            <option value="Pantry">🥫 Pantry</option>
-            <option value="Frozen">🧊 Frozen</option>
-            <option value="Household">🧻 Household</option>
+            <option value="Produce"> Produce</option>
+            <option value="Dairy">Dairy</option>
+            <option value="Bakery">Bakery</option>
+            <option value="Meat">Meat</option>
+            <option value="Pantry">Pantry</option>
+            <option value="Frozen">Frozen</option>
+            <option value="Household"> Household</option>
             <option value="Other">✨ Other</option>
           </select>
           <button class="btn-primary" id="btnAdd">Add</button>
@@ -120,8 +120,8 @@
 
       <div class="list-wrap" id="listWrap">
         <div class="empty-state" id="emptyState">
-          <p class="empty-emoji">🍭</p>
-          <p>Your list is empty. Add something above, or try the mic.</p>
+          <p class="empty-emoji"></p>
+          <p>Your list is empty. Add something above, or tap the speak button and say your item and price.</p>
         </div>
         <!-- item groups injected by JS -->
       </div>
@@ -239,13 +239,13 @@
   <!-- ===== BOTTOM NAV ===== -->
   <nav class="bottom-nav glass chrome-strip">
     <button class="nav-btn active" data-view="shopping" id="view-shopping-tab">
-      <span class="nav-icon">🛍️</span><span>List</span>
+      <span class="nav-icon">📝</span><span>List</span>
     </button>
     <button class="nav-btn" data-view="kids" id="view-kids-tab">
       <span class="nav-icon">🎈</span><span>Kids+</span>
     </button>
     <button class="nav-btn" data-view="settings" id="view-settings-tab">
-      <span class="nav-icon">⚙️</span><span>Settings</span>
+      <span class="nav-icon">⚙</span><span>Settings</span>
     </button>
   </nav>
 
