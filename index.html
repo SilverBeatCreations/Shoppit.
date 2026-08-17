@@ -24,16 +24,18 @@
   <!-- ===== HEADER ===== -->
   <header class="topbar glass chrome-strip">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <h1>Shoppit<span class="brand-dot">🖋</span></h1>
-    </div>
+      <span class="brand-mark" 
+            aria-hidden="true"></span>
+      <h1>ShoppiT<span class="brand-dot"></span></h1><div><p></p><h5>Smart Shopping list</h5></div>
+  
+  
+  </header>
     <div class="topbar-actions">
       <button class="icon-btn" id="btnTimer" aria-label="Open timer" title="Timer">🕔</button>
       <button class="icon-btn" id="btnScan" aria-label="Scan a barcode" title="Scan">▤</button>
       <button class="icon-btn" id="btnExport" aria-label="Export or share list" title="Export / Share">⮣</button>
       <button class="icon-btn" id="btnDark" aria-label="Toggle dark mode" title="Dark mode">☾</button>
     </div>
-  </header>
 
   <!-- ===== OFFLINE PILL ===== -->
   <div class="offline-pill" id="offlinePill" hidden>You're offline — Shoppit still works, changes are saved on this device.</div>
@@ -89,22 +91,14 @@
           <button class="icon-btn mic-btn" id="btnMic" aria-label="Add item by voice" title="Voice add">💬</button>
         </div>
         <div class="add-row add-row-secondary">
+           </div>
+          <input type="number" id="priceInput" class="price-input" inputmode="decimal" min="0" step="0.01" placeholder="Price $">
+        <div>
           <div class="stepper" id="qtyStepper">
             <button type="button" class="stepper-btn" id="qtyMinus" aria-label="Decrease quantity">−</button>
             <span id="qtyValue">1</span>
             <button type="button" class="stepper-btn" id="qtyPlus" aria-label="Increase quantity">+</button>
-          </div>
-          <input type="number" id="priceInput" class="price-input" inputmode="decimal" min="0" step="0.01" placeholder="Price $">
-          <select id="categorySelect" aria-label="Category">
-            <option value="Produce"> Produce</option>
-            <option value="Dairy">Dairy</option>
-            <option value="Bakery">Bakery</option>
-            <option value="Meat">Meat</option>
-            <option value="Pantry">Pantry</option>
-            <option value="Frozen">Frozen</option>
-            <option value="Household"> Household</option>
-            <option value="Other">✨ Other</option>
-          </select>
+          
           <button class="btn-primary" id="btnAdd">Add</button>
         </div>
       </div>
