@@ -237,7 +237,7 @@
     const spent = computeTotals();
     const budget = Number(state.budget) || 0;
     el.spentValue.textContent = currency(spent);
-    el.remainingValue.textContent = currency(Math.max(budget - spent, budget === 0 ? -spent : budget - spent));
+    el.remainingValue.textContent = currency(budget - spent);
 
     let pct = budget > 0 ? (spent / budget) * 100 : spent > 0 ? 100 : 0;
     pct = Math.max(0, Math.min(pct, 100));
@@ -549,10 +549,6 @@
       words.shift();
     }
     let name = words.join(" ").replace(/^(of\s+)/, "").trim();
-    name = name.replace(/s$/, (m, offset, str) => {
-      // keep plural if it matches a product with trailing s intentionally, else strip for singular match
-      return str;
-    });
 
     if (!name) { toast("Didn't catch an item name — try again"); return; }
     name = name.charAt(0).toUpperCase() + name.slice(1);
