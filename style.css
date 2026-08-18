@@ -1,1060 +1,1194 @@
-/* ============================================================
-   SHOPPIT — app.js
-   Voice recognition · predictive items · budget tracking ·
-   animated progress · Kids+ maths · smart save tips ·
-   offline storage · export/share · scanner · timer · dark mode
-   ============================================================ */
-(function () {
-  "use strict";
-
-  /* ---------------------------------------------------------
-     0. CONSTANTS / PRODUCT DATABASE
-  --------------------------------------------------------- */
-  const STORAGE_KEY = "shoppit_state_v1";
-
-  const PRODUCT_DB = [
-    { name: "Milk", category: "Dairy", price: 3.49 },
-    { name: "Eggs", category: "Dairy", price: 4.29 },
-    { name: "Butter", category: "Dairy", price: 4.99 },
-    { name: "Cheddar Cheese", category: "Dairy", price: 5.49 },
-    { name: "Greek Yogurt", category: "Dairy", price: 4.79 },
-    { name: "Bread", category: "Bakery", price: 3.29 },
-    { name: "Bagels", category: "Bakery", price: 3.99 },
-    { name: "Croissants", category: "Bakery", price: 4.49 },
-    { name: "Tortillas", category: "Bakery", price: 3.19 },
-    { name: "Bananas", category: "Produce", price: 1.49 },
-    { name: "Apples", category: "Produce", price: 2.99 },
-    { name: "Avocado", category: "Produce", price: 1.79 },
-    { name: "Tomatoes", category: "Produce", price: 2.49 },
-    { name: "Lettuce", category: "Produce", price: 1.99 },
-    { name: "Carrots", category: "Produce", price: 1.59 },
-    { name: "Onions", category: "Produce", price: 1.69 },
-    { name: "Potatoes", category: "Produce", price: 3.99 },
-    { name: "Broccoli", category: "Produce", price: 2.29 },
-    { name: "Strawberries", category: "Produce", price: 4.49 },
-    { name: "Chicken Breast", category: "Meat", price: 7.99 },
-    { name: "Ground Beef", category: "Meat", price: 6.49 },
-    { name: "Bacon", category: "Meat", price: 5.99 },
-    { name: "Salmon", category: "Meat", price: 9.99 },
-    { name: "Sausages", category: "Meat", price: 5.49 },
-    { name: "Rice", category: "Pantry", price: 4.29 },
-    { name: "Pasta", category: "Pantry", price: 1.99 },
-    { name: "Olive Oil", category: "Pantry", price: 8.49 },
-    { name: "Peanut Butter", category: "Pantry", price: 4.99 },
-    { name: "Cereal", category: "Pantry", price: 4.49 },
-    { name: "Coffee", category: "Pantry", price: 8.99 },
-    { name: "Canned Beans", category: "Pantry", price: 1.29 },
-    { name: "Flour", category: "Pantry", price: 3.49 },
-    { name: "Sugar", category: "Pantry", price: 2.99 },
-    { name: "Ketchup", category: "Pantry", price: 3.29 },
-    { name: "Ice Cream", category: "Frozen", price: 5.99 },
-    { name: "Frozen Pizza", category: "Frozen", price: 6.49 },
-    { name: "Frozen Peas", category: "Frozen", price: 2.49 },
-    { name: "Frozen Berries", category: "Frozen", price: 4.99 },
-    { name: "Paper Towels", category: "Household", price: 6.99 },
-    { name: "Toilet Paper", category: "Household", price: 8.99 },
-    { name: "Dish Soap", category: "Household", price: 3.49 },
-    { name: "Laundry Detergent", category: "Household", price: 9.99 },
-    { name: "Trash Bags", category: "Household", price: 5.49 },
-    { name: "Sponges", category: "Household", price: 2.99 }
-  ];
-
-  const CATEGORY_ORDER = ["Produce", "Dairy", "Bakery", "Meat", "Pantry", "Frozen", "Household", "Other"];
-
-  const SAVE_TIPS = [
-    "Buy store-brand items — they're often 20–30% cheaper with the same quality.",
-    "Shop with a list (like this one!) to avoid impulse buys that blow the budget.",
-    "Produce in season costs less and tastes better — check what's local this month.",
-    "Buying pantry staples like rice and pasta in bulk usually lowers the per-unit price.",
-    "Check unit price, not just the sticker price — bigger isn't always cheaper.",
-    "Frozen fruit and veg are just as nutritious as fresh and rarely go to waste.",
-    "Plan meals around what's on sale this week to cut your total spend.",
-    "Avoid shopping hungry — it's proven to increase impulse purchases.",
-    "Loyalty apps and digital coupons can add up to real savings over a month.",
-    "Cut down on pre-cut or pre-packaged produce — whole items are usually cheaper.",
-    "Generic medicine and household items work the same as name brands for less.",
-    "Batch-cook and freeze portions to avoid pricier last-minute takeout runs."
-  ];
-
-  const NUMBER_WORDS = {
-    zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
-    eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
-    fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
-    nineteen: 19, twenty: 20, a: 1, an: 1, couple: 2, few: 3, dozen: 12
-  };
-
-  /* ---------------------------------------------------------
-     1. STATE
-  --------------------------------------------------------- */
-  let state = loadState();
-
-  function defaultState() {
-    return {
-      items: [],
-      budget: 0,
-      currency: "$",
-      theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
-      voiceLang: "en-US",
-      history: {},
-      kids: { score: 0, streak: 0, best: 0 },
-      tipIndex: 0
-    };
-  }
-
-  function loadState() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return defaultState();
-      const parsed = JSON.parse(raw);
-      return Object.assign(defaultState(), parsed);
-    } catch (e) {
-      return defaultState();
-    }
-  }
-
-  function saveState() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (e) {
-      console.warn("Shoppit: could not save state", e);
-    }
-  }
-
-  function uid() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  }
-
-  /* ---------------------------------------------------------
-     2. DOM SHORTCUTS
-  --------------------------------------------------------- */
-  const $ = (sel) => document.querySelector(sel);
-  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-
-  const el = {
-    body: document.body,
-    budgetInput: $("#budgetInput"),
-    spentValue: $("#spentValue"),
-    remainingValue: $("#remainingValue"),
-    progressFill: $("#progressFill"),
-    progressTrack: $("#progressTrack"),
-    progressCaption: $("#progressCaption"),
-    tipBanner: $("#tipBanner"),
-    tipText: $("#tipText"),
-    tipNext: $("#tipNext"),
-    itemInput: $("#itemInput"),
-    suggestList: $("#suggestList"),
-    qtyValue: $("#qtyValue"),
-    qtyMinus: $("#qtyMinus"),
-    qtyPlus: $("#qtyPlus"),
-    priceInput: $("#priceInput"),
-    categorySelect: $("#categorySelect"),
-    btnAdd: $("#btnAdd"),
-    btnMic: $("#btnMic"),
-    listWrap: $("#listWrap"),
-    emptyState: $("#emptyState"),
-    countPill: $("#countPill"),
-    btnClearChecked: $("#btnClearChecked"),
-    toast: $("#toast"),
-    offlinePill: $("#offlinePill"),
-    btnDark: $("#btnDark"),
-    darkToggle: $("#darkToggle"),
-    currencySelect: $("#currencySelect"),
-    voiceLangSelect: $("#voiceLangSelect"),
-    btnResetKids: $("#btnResetKids"),
-    btnClearAll: $("#btnClearAll"),
-    kidsScore: $("#kidsScore"),
-    kidsStreak: $("#kidsStreak"),
-    kidsBest: $("#kidsBest")
-  };
-
-  let pendingQty = 1;
-
-  /* ---------------------------------------------------------
-     3. NAVIGATION (bottom tabs)
-  --------------------------------------------------------- */
-  $$(".nav-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      $$(".nav-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      const view = btn.dataset.view;
-      $$(".view").forEach((v) => v.classList.remove("active"));
-      $("#view-" + view).classList.add("active");
-    });
-  });
-
-  /* ---------------------------------------------------------
-     4. MODALS (generic open/close)
-  --------------------------------------------------------- */
-  function openModal(idOrEl) {
-    const m = typeof idOrEl === "string" ? $("#" + idOrEl) : idOrEl;
-    if (m) m.hidden = false;
-  }
-  function closeModal(idOrEl) {
-    const m = typeof idOrEl === "string" ? $("#" + idOrEl) : idOrEl;
-    if (m) m.hidden = true;
-  }
-  $$("[data-close]").forEach((btn) => {
-    btn.addEventListener("click", () => closeModal(btn.dataset.close));
-  });
-  $$(".modal-overlay").forEach((overlay) => {
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) overlay.hidden = true;
-    });
-  });
-
-  /* ---------------------------------------------------------
-     5. TOAST
-  --------------------------------------------------------- */
-  let toastTimer = null;
-  function toast(msg) {
-    el.toast.textContent = msg;
-    el.toast.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.toast.classList.remove("show"), 2400);
-  }
-
-  /* ---------------------------------------------------------
-     6. RENDER
-  --------------------------------------------------------- */
-  function currency(n) {
-    return state.currency + (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
-  }
-
-  function computeTotals() {
-    let spent = 0;
-    state.items.forEach((it) => (spent += (it.price || 0) * it.qty));
-    return spent;
-  }
-
-  function render() {
-    renderBudget();
-    renderList();
-    renderTip();
-    saveState();
-  }
-
-  function renderBudget() {
-    const spent = computeTotals();
-    const budget = Number(state.budget) || 0;
-    el.spentValue.textContent = currency(spent);
-    el.remainingValue.textContent = currency(Math.max(budget - spent, budget === 0 ? -spent : budget - spent));
-
-    let pct = budget > 0 ? (spent / budget) * 100 : spent > 0 ? 100 : 0;
-    pct = Math.max(0, Math.min(pct, 100));
-    el.progressFill.style.width = pct + "%";
-    el.progressTrack.setAttribute("aria-valuenow", Math.round(pct));
-
-    el.progressFill.classList.remove("warn", "over");
-    if (budget > 0 && spent > budget) {
-      el.progressFill.classList.add("over");
-      el.progressCaption.textContent = "You're " + currency(spent - budget) + " over budget.";
-    } else if (budget > 0 && spent / budget >= 0.8) {
-      el.progressFill.classList.add("warn");
-      el.progressCaption.textContent = "Getting close to your budget — nice tracking!";
-    } else if (budget > 0) {
-      el.progressCaption.textContent = currency(budget - spent) + " left to spend.";
-    } else {
-      el.progressCaption.textContent = state.items.length
-        ? "Set a budget above to track your spending."
-        : "Add items to see your budget fill up.";
-    }
-  }
-
-  function renderList() {
-    el.listWrap.querySelectorAll(".category-group").forEach((n) => n.remove());
-    const count = state.items.length;
-    el.countPill.textContent = count + (count === 1 ? " item" : " items");
-    el.emptyState.hidden = count > 0;
-    if (!count) return;
-
-    const groups = {};
-    state.items.forEach((it) => {
-      const cat = it.category || "Other";
-      (groups[cat] = groups[cat] || []).push(it);
-    });
-
-    CATEGORY_ORDER.forEach((cat) => {
-      if (!groups[cat]) return;
-      const wrap = document.createElement("div");
-      wrap.className = "category-group";
-      const title = document.createElement("p");
-      title.className = "category-title";
-      title.textContent = cat + " · " + groups[cat].length;
-      wrap.appendChild(title);
-
-      groups[cat]
-        .sort((a, b) => a.checked - b.checked)
-        .forEach((it) => wrap.appendChild(renderItemRow(it)));
-
-      el.listWrap.appendChild(wrap);
-    });
-  }
-
-  function renderItemRow(it) {
-    const row = document.createElement("div");
-    row.className = "item-row" + (it.checked ? " checked" : "");
-    row.dataset.id = it.id;
-
-    row.innerHTML =
-      '<button class="check-btn" aria-label="Mark ' + escapeHtml(it.name) + ' as picked up">' +
-        (it.checked ? "✓" : "") +
-      "</button>" +
-      '<div class="item-main">' +
-        '<p class="item-name">' + escapeHtml(it.name) + "</p>" +
-        '<p class="item-meta">' + (it.price ? currency(it.price) + " each" : "no price set") + "</p>" +
-      "</div>" +
-      '<div class="item-stepper">' +
-        '<button class="row-minus" aria-label="Decrease quantity">−</button>' +
-        "<span>" + it.qty + "</span>" +
-        '<button class="row-plus" aria-label="Increase quantity">+</button>' +
-      "</div>" +
-      '<div class="item-price">' + currency((it.price || 0) * it.qty) + "</div>" +
-      '<button class="item-delete" aria-label="Remove ' + escapeHtml(it.name) + '">✕</button>';
-
-    row.querySelector(".check-btn").addEventListener("click", () => toggleCheck(it.id));
-    row.querySelector(".row-minus").addEventListener("click", () => changeQty(it.id, -1));
-    row.querySelector(".row-plus").addEventListener("click", () => changeQty(it.id, 1));
-    row.querySelector(".item-delete").addEventListener("click", () => deleteItem(it.id));
-    return row;
-  }
-
-  function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, (c) => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-    }[c]));
-  }
-
-  /* ---------------------------------------------------------
-     7. ITEM ACTIONS
-  --------------------------------------------------------- */
-  function addItem(name, qty, price, category) {
-    name = (name || "").trim();
-    if (!name) return;
-    qty = Math.max(1, Math.round(qty) || 1);
-    price = isNaN(parseFloat(price)) ? matchProduct(name)?.price || 0 : parseFloat(price);
-    category = category || matchProduct(name)?.category || "Other";
-
-    const existing = state.items.find(
-      (it) => it.name.toLowerCase() === name.toLowerCase() && !it.checked
-    );
-    if (existing) {
-      existing.qty += qty;
-    } else {
-      state.items.push({
-        id: uid(), name, qty, price, category, checked: false, createdAt: Date.now()
-      });
-    }
-    state.history[name.toLowerCase()] = (state.history[name.toLowerCase()] || 0) + 1;
-    render();
-    toast(name + " added to your list");
-  }
-
-  function matchProduct(name) {
-    const n = name.toLowerCase();
-    return PRODUCT_DB.find((p) => p.name.toLowerCase() === n) ||
-      PRODUCT_DB.find((p) => p.name.toLowerCase().includes(n) || n.includes(p.name.toLowerCase()));
-  }
-
-  function toggleCheck(id) {
-    const it = state.items.find((i) => i.id === id);
-    if (it) { it.checked = !it.checked; render(); }
-  }
-  function changeQty(id, delta) {
-    const it = state.items.find((i) => i.id === id);
-    if (it) { it.qty = Math.max(1, it.qty + delta); render(); }
-  }
-  function deleteItem(id) {
-    state.items = state.items.filter((i) => i.id !== id);
-    render();
-  }
-
-  el.btnClearChecked.addEventListener("click", () => {
-    const before = state.items.length;
-    state.items = state.items.filter((i) => !i.checked);
-    if (state.items.length !== before) toast("Checked items cleared");
-    render();
-  });
-
-  el.btnClearAll.addEventListener("click", () => {
-    if (!state.items.length) return toast("List already empty");
-    if (confirm("Clear your entire list? This can't be undone.")) {
-      state.items = [];
-      render();
-      toast("List cleared");
-    }
-  });
-
-  /* ---------------------------------------------------------
-     8. ADD FORM (quantity stepper, predictive suggestions)
-  --------------------------------------------------------- */
-  el.qtyMinus.addEventListener("click", () => {
-    pendingQty = Math.max(1, pendingQty - 1);
-    el.qtyValue.textContent = pendingQty;
-  });
-  el.qtyPlus.addEventListener("click", () => {
-    pendingQty = Math.min(99, pendingQty + 1);
-    el.qtyValue.textContent = pendingQty;
-  });
-
-  el.btnAdd.addEventListener("click", submitAddForm);
-  el.itemInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); submitAddForm(); }
-    if (e.key === "ArrowDown") { e.preventDefault(); moveSuggestFocus(1); }
-    if (e.key === "ArrowUp") { e.preventDefault(); moveSuggestFocus(-1); }
-    if (e.key === "Escape") hideSuggestions();
-  });
-
-  function submitAddForm() {
-    const name = el.itemInput.value.trim();
-    if (!name) { el.itemInput.focus(); return; }
-    addItem(name, pendingQty, el.priceInput.value, el.categorySelect.value);
-    el.itemInput.value = "";
-    el.priceInput.value = "";
-    pendingQty = 1;
-    el.qtyValue.textContent = 1;
-    hideSuggestions();
-    el.itemInput.focus();
-  }
-
-  // --- Predictive shopping items ---
-  let suggestIndex = -1;
-  el.itemInput.addEventListener("input", () => renderSuggestions(el.itemInput.value));
-  el.itemInput.addEventListener("focus", () => renderSuggestions(el.itemInput.value));
-  document.addEventListener("click", (e) => {
-    if (!el.suggestList.contains(e.target) && e.target !== el.itemInput) hideSuggestions();
-  });
-
-  function getSuggestions(query) {
-    query = (query || "").trim().toLowerCase();
-    const scored = PRODUCT_DB.map((p) => {
-      const freq = state.history[p.name.toLowerCase()] || 0;
-      let score = -1;
-      const n = p.name.toLowerCase();
-      if (!query) score = freq;
-      else if (n.startsWith(query)) score = 100 + freq;
-      else if (n.includes(query)) score = 50 + freq;
-      return { p, score };
-    }).filter((s) => s.score >= 0);
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, 6).map((s) => s.p);
-  }
-
-  function renderSuggestions(query) {
-    const list = getSuggestions(query);
-    if (!list.length) return hideSuggestions();
-    el.suggestList.innerHTML = "";
-    list.forEach((p, i) => {
-      const li = document.createElement("li");
-      li.className = "suggest-item";
-      li.setAttribute("role", "option");
-      li.innerHTML = "<span>" + escapeHtml(p.name) + "</span><small>" + p.category + "</small>";
-      li.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        el.priceInput.value = p.price.toFixed(2);
-        el.categorySelect.value = p.category;
-        el.itemInput.value = p.name;
-        hideSuggestions();
-        el.itemInput.focus();
-      });
-      el.suggestList.appendChild(li);
-    });
-    suggestIndex = -1;
-    el.suggestList.hidden = false;
-    el.itemInput.setAttribute("aria-expanded", "true");
-  }
-
-  function moveSuggestFocus(dir) {
-    const items = $$(".suggest-item");
-    if (!items.length) return;
-    items[suggestIndex]?.classList.remove("active");
-    suggestIndex = (suggestIndex + dir + items.length) % items.length;
-    items[suggestIndex].classList.add("active");
-    items[suggestIndex].scrollIntoView({ block: "nearest" });
-  }
-
-  function hideSuggestions() {
-    el.suggestList.hidden = true;
-    el.itemInput.setAttribute("aria-expanded", "false");
-  }
-
-  /* ---------------------------------------------------------
-     9. SMART SAVE TIPS
-  --------------------------------------------------------- */
-  function renderTip() {
-    if (!state.items.length) { el.tipBanner.hidden = true; return; }
-    el.tipBanner.hidden = false;
-    el.tipText.textContent = SAVE_TIPS[state.tipIndex % SAVE_TIPS.length];
-  }
-  el.tipNext.addEventListener("click", () => {
-    state.tipIndex = (state.tipIndex + 1) % SAVE_TIPS.length;
-    renderTip();
-    saveState();
-  });
-
-  /* ---------------------------------------------------------
-     10. VOICE RECOGNITION
-  --------------------------------------------------------- */
-  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let recognition = null;
-  let listening = false;
-
-  if (SpeechRecognitionAPI) {
-    recognition = new SpeechRecognitionAPI();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.addEventListener("result", (e) => {
-      const transcript = e.results[0][0].transcript;
-      handleVoiceTranscript(transcript);
-    });
-    recognition.addEventListener("end", () => setListening(false));
-    recognition.addEventListener("error", (e) => {
-      setListening(false);
-      if (e.error !== "no-speech") toast("Voice input error: " + e.error);
-    });
-  } else {
-    el.btnMic.addEventListener("click", () =>
-      toast("Voice input isn't supported in this browser")
-    );
-  }
-
-  function setListening(val) {
-    listening = val;
-    el.btnMic.classList.toggle("listening", val);
-    el.btnMic.textContent = val ? "●" : "🎤";
-  }
-
-  if (recognition) {
-    el.btnMic.addEventListener("click", () => {
-      if (listening) { recognition.stop(); return; }
-      try {
-        recognition.lang = state.voiceLang;
-        recognition.start();
-        setListening(true);
-        toast("Listening… say something like “add two apples”");
-      } catch (e) { /* already started */ }
-    });
-  }
-
-  function handleVoiceTranscript(raw) {
-    let text = raw.toLowerCase().trim();
-    text = text.replace(/^(please\s+)?(add|buy|get|put|i need|we need)\s+/i, "");
-    text = text.replace(/\s+(to (the|my) list)$/i, "");
-
-    let qty = 1;
-    const words = text.split(/\s+/);
-    if (words.length && (/^\d+$/.test(words[0]) || NUMBER_WORDS.hasOwnProperty(words[0]))) {
-      qty = /^\d+$/.test(words[0]) ? parseInt(words[0], 10) : NUMBER_WORDS[words[0]];
-      words.shift();
-    }
-    let name = words.join(" ").replace(/^(of\s+)/, "").trim();
-    name = name.replace(/s$/, (m, offset, str) => {
-      // keep plural if it matches a product with trailing s intentionally, else strip for singular match
-      return str;
-    });
-
-    if (!name) { toast("Didn't catch an item name — try again"); return; }
-    name = name.charAt(0).toUpperCase() + name.slice(1);
-
-    const product = matchProduct(name);
-    addItem(name, qty, product ? product.price : "", product ? product.category : "Other");
-  }
-
-  /* ---------------------------------------------------------
-     11. BUDGET INPUT
-  --------------------------------------------------------- */
-  el.budgetInput.addEventListener("input", () => {
-    state.budget = parseFloat(el.budgetInput.value) || 0;
-    renderBudget();
-    saveState();
-  });
-  el.budgetInput.value = state.budget || "";
-
-  /* ---------------------------------------------------------
-     12. DARK MODE
-  --------------------------------------------------------- */
-  function applyTheme() {
-    el.body.setAttribute("data-theme", state.theme);
-    el.darkToggle.checked = state.theme === "dark";
-    el.btnDark.classList.toggle("active-toggle", state.theme === "dark");
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", state.theme === "dark" ? "#1F1430" : "#FF5DA2");
-  }
-  function toggleTheme() {
-    state.theme = state.theme === "dark" ? "light" : "dark";
-    applyTheme();
-    saveState();
-  }
-  el.btnDark.addEventListener("click", toggleTheme);
-  el.darkToggle.addEventListener("change", toggleTheme);
-
-  /* ---------------------------------------------------------
-     13. SETTINGS: currency / voice lang / resets
-  --------------------------------------------------------- */
-  el.currencySelect.value = state.currency;
-  el.currencySelect.addEventListener("change", () => {
-    state.currency = el.currencySelect.value;
-    render();
-  });
-  el.voiceLangSelect.value = state.voiceLang;
-  el.voiceLangSelect.addEventListener("change", () => {
-    state.voiceLang = el.voiceLangSelect.value;
-    saveState();
-  });
-  el.btnResetKids.addEventListener("click", () => {
-    state.kids = { score: 0, streak: 0, best: 0 };
-    renderKidsStats();
-    saveState();
-    toast("Kids+ progress reset");
-  });
-
-  /* ---------------------------------------------------------
-     14. KIDS+ MATHS QUIZ (hundreds of procedurally generated Qs)
-  --------------------------------------------------------- */
-  const kidsEl = {
-    grid: $("#levelGrid"),
-    card: $("#quizCard"),
-    levelPill: $("#quizLevelPill"),
-    question: $("#quizQuestion"),
-    answers: $("#quizAnswers"),
-    feedback: $("#quizFeedback"),
-    exit: $("#btnQuizExit")
-  };
-  const LEVELS = {
-    easy: { label: "Sweet Start", ops: ["+", "-"], max: 10 },
-    medium: { label: "Sugar Rush", ops: ["+", "-", "×"], max: 50 },
-    hard: { label: "Candy Genius", ops: ["+", "-", "×", "÷"], max: 100 }
-  };
-  let currentLevel = "easy";
-  let currentAnswer = null;
-  let answerLock = false;
-
-  kidsEl.grid.addEventListener("click", (e) => {
-    const card = e.target.closest(".level-card");
-    if (!card) return;
-    currentLevel = card.dataset.level;
-    kidsEl.card.hidden = false;
-    kidsEl.levelPill.textContent = LEVELS[currentLevel].label;
-    nextQuestion();
-  });
-  kidsEl.exit.addEventListener("click", () => { kidsEl.card.hidden = true; });
-
-  function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
-
-  function generateQuestion(levelKey) {
-    const level = LEVELS[levelKey];
-    const op = level.ops[randInt(0, level.ops.length - 1)];
-    let a, b, answer;
-    switch (op) {
-      case "+":
-        a = randInt(1, level.max); b = randInt(1, level.max);
-        answer = a + b;
-        break;
-      case "-":
-        a = randInt(1, level.max); b = randInt(0, a);
-        answer = a - b;
-        break;
-      case "×":
-        a = randInt(1, Math.min(12, level.max)); b = randInt(1, Math.min(12, level.max));
-        answer = a * b;
-        break;
-      case "÷":
-        b = randInt(2, 12); answer = randInt(1, 12); a = b * answer;
-        break;
-    }
-    return { text: a + " " + op + " " + b + " = ?", answer };
-  }
-
-  function generateChoices(answer) {
-    const choices = new Set([answer]);
-    let guardrail = 0;
-    while (choices.size < 4 && guardrail < 50) {
-      guardrail++;
-      const spread = Math.max(2, Math.round(Math.abs(answer) * 0.25) + randInt(1, 4));
-      const wrong = answer + (randInt(0, 1) ? 1 : -1) * randInt(1, spread);
-      if (wrong !== answer && wrong >= 0) choices.add(wrong);
-    }
-    return shuffle(Array.from(choices));
-  }
-
-  function shuffle(arr) {
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = randInt(0, i);
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  }
-
-  function nextQuestion() {
-    answerLock = false;
-    kidsEl.feedback.textContent = "\u00A0";
-    const q = generateQuestion(currentLevel);
-    currentAnswer = q.answer;
-    kidsEl.question.textContent = q.text;
-    kidsEl.answers.innerHTML = "";
-    generateChoices(q.answer).forEach((choice) => {
-      const btn = document.createElement("button");
-      btn.className = "quiz-answer-btn";
-      btn.textContent = choice;
-      btn.addEventListener("click", () => handleAnswer(choice, btn));
-      kidsEl.answers.appendChild(btn);
-    });
-  }
-
-  function handleAnswer(choice, btn) {
-    if (answerLock) return;
-    answerLock = true;
-    const correct = choice === currentAnswer;
-    btn.classList.add(correct ? "correct" : "wrong");
-    if (correct) {
-      state.kids.score += 10;
-      state.kids.streak += 1;
-      state.kids.best = Math.max(state.kids.best, state.kids.streak);
-      kidsEl.feedback.textContent = "Correct! 🎉 +10 points";
-    } else {
-      state.kids.streak = 0;
-      kidsEl.feedback.textContent = "Not quite — the answer was " + currentAnswer;
-      $$(".quiz-answer-btn", kidsEl.answers).forEach((b) => {
-        if (Number(b.textContent) === currentAnswer) b.classList.add("correct");
-      });
-    }
-    renderKidsStats();
-    saveState();
-    setTimeout(nextQuestion, 1100);
-  }
-
-  function renderKidsStats() {
-    el.kidsScore.textContent = state.kids.score;
-    el.kidsStreak.textContent = state.kids.streak;
-    el.kidsBest.textContent = state.kids.best;
-  }
-
-  /* ---------------------------------------------------------
-     15. SCANNER + CONFIRMATION MODAL
-  --------------------------------------------------------- */
-  const CATEGORY_EMOJI = {
-    Produce: "🥦", Dairy: "🥛", Bakery: "🍞", Meat: "🍗",
-    Pantry: "🥫", Frozen: "🧊", Household: "🧻", Other: "✨"
-  };
-  let lastScanned = null;
-
-  $("#btnScan").addEventListener("click", () => openModal("scanModal"));
-  $("#btnScanNow").addEventListener("click", () => {
-    const product = PRODUCT_DB[randInt(0, PRODUCT_DB.length - 1)];
-    const price = Math.max(0.5, product.price + (Math.random() * 1 - 0.5)).toFixed(2);
-    lastScanned = { name: product.name, category: product.category, price: parseFloat(price) };
-
-    $("#scanResultEmoji").textContent = CATEGORY_EMOJI[product.category] || "🛒";
-    $("#scanResultName").textContent = lastScanned.name;
-    $("#scanResultPrice").textContent = currency(lastScanned.price);
-
-    closeModal("scanModal");
-    openModal("scanConfirmModal");
-  });
-  $("#btnScanReject").addEventListener("click", () => {
-    closeModal("scanConfirmModal");
-    openModal("scanModal");
-  });
-  $("#btnScanConfirm").addEventListener("click", () => {
-    if (lastScanned) addItem(lastScanned.name, 1, lastScanned.price, lastScanned.category);
-    closeModal("scanConfirmModal");
-  });
-
-  /* ---------------------------------------------------------
-     16. TIMER
-  --------------------------------------------------------- */
-  const timerEl = {
-    display: $("#timerDisplay"),
-    ring: $("#timerRingFg"),
-    toggle: $("#btnTimerToggle"),
-    reset: $("#btnTimerReset"),
-    chips: $$(".chip")
-  };
-  const RING_CIRC = 2 * Math.PI * 52;
-  let timerTotal = 300;
-  let timerRemaining = 300;
-  let timerInterval = null;
-  let timerRunning = false;
-
-  timerEl.ring.style.strokeDasharray = RING_CIRC;
-
-  $("#btnTimer").addEventListener("click", () => { openModal("timerModal"); updateTimerUI(); });
-
-  timerEl.chips.forEach((chip) => {
-    chip.addEventListener("click", () => {
-      timerEl.chips.forEach((c) => c.classList.remove("active"));
-      chip.classList.add("active");
-      timerTotal = parseInt(chip.dataset.mins, 10) * 60;
-      timerRemaining = timerTotal;
-      stopTimer();
-      updateTimerUI();
-    });
-  });
-
-  timerEl.toggle.addEventListener("click", () => {
-    timerRunning ? stopTimer() : startTimer();
-  });
-  timerEl.reset.addEventListener("click", () => {
-    stopTimer();
-    timerRemaining = timerTotal;
-    updateTimerUI();
-  });
-
-  function startTimer() {
-    if (timerRemaining <= 0) timerRemaining = timerTotal;
-    timerRunning = true;
-    timerEl.toggle.textContent = "Pause";
-    timerInterval = setInterval(() => {
-      timerRemaining--;
-      updateTimerUI();
-      if (timerRemaining <= 0) {
-        stopTimer();
-        toast("⏰ Timer's up!");
-        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-      }
-    }, 1000);
-  }
-  function stopTimer() {
-    timerRunning = false;
-    timerEl.toggle.textContent = "Start";
-    clearInterval(timerInterval);
-  }
-  function updateTimerUI() {
-    const mins = Math.floor(Math.max(timerRemaining, 0) / 60).toString().padStart(2, "0");
-    const secs = Math.max(timerRemaining, 0) % 60;
-    timerEl.display.textContent = mins + ":" + secs.toString().padStart(2, "0");
-    const pct = timerTotal ? timerRemaining / timerTotal : 0;
-    timerEl.ring.style.strokeDashoffset = RING_CIRC * (1 - pct);
-  }
-  updateTimerUI();
-
-  /* ---------------------------------------------------------
-     17. EXPORT / SHARE
-  --------------------------------------------------------- */
-  $("#btnExport").addEventListener("click", () => {
-    $("#exportPreview").value = buildExportText();
-    openModal("exportModal");
-  });
-
-  function buildExportText() {
-    const lines = ["🛒 Shoppit list", ""];
-    const groups = {};
-    state.items.forEach((it) => { (groups[it.category] = groups[it.category] || []).push(it); });
-    CATEGORY_ORDER.forEach((cat) => {
-      if (!groups[cat]) return;
-      lines.push(cat + ":");
-      groups[cat].forEach((it) => {
-        lines.push(
-          (it.checked ? "  [x] " : "  [ ] ") + it.qty + "x " + it.name +
-          (it.price ? " — " + currency(it.price * it.qty) : "")
-        );
-      });
-      lines.push("");
-    });
-    const spent = computeTotals();
-    lines.push("Total: " + currency(spent));
-    if (state.budget) lines.push("Budget: " + currency(state.budget));
-    return lines.join("\n");
-  }
-
-  $("#btnShareNative").addEventListener("click", async () => {
-    const text = buildExportText();
-    if (navigator.share) {
-      try { await navigator.share({ title: "Shoppit list", text }); }
-      catch (e) { /* user cancelled */ }
-    } else {
-      toast("Sharing isn't supported here — try download or copy instead");
-    }
-  });
-  $("#btnDownloadTxt").addEventListener("click", () => downloadFile("shoppit-list.txt", buildExportText(), "text/plain"));
-  $("#btnDownloadJson").addEventListener("click", () =>
-    downloadFile("shoppit-list.json", JSON.stringify(state.items, null, 2), "application/json")
-  );
-  $("#btnCopyList").addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(buildExportText()); toast("Copied to clipboard"); }
-    catch (e) { toast("Couldn't copy — try download instead"); }
-  });
-
-  function downloadFile(filename, content, mime) {
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-    toast("Downloaded " + filename);
-  }
-
-  /* ---------------------------------------------------------
-     18. OFFLINE DETECTION
-  --------------------------------------------------------- */
-  function updateOnlineStatus() { el.offlinePill.hidden = navigator.onLine; }
-  window.addEventListener("online", updateOnlineStatus);
-  window.addEventListener("offline", updateOnlineStatus);
-
-  /* ---------------------------------------------------------
-     19. PWA SERVICE WORKER
-  --------------------------------------------------------- */
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("service-worker.js").catch((err) => {
-        console.warn("Shoppit: service worker registration failed", err);
-      });
-    });
-  }
-
-  /* ---------------------------------------------------------
-     20. INIT
-  --------------------------------------------------------- */
-  function init() {
-    applyTheme();
-    updateOnlineStatus();
-    renderKidsStats();
-    render();
-  }
-  init();
-})();
-  "name": "Shoppit — Smart Shopping List",
-  "short_name": "Shoppit",
-  "description": "A candy-glazed, voice-powered shopping list with budget tracking, offline storage and a Kids+ maths corner.",
-  "start_url": "./index.html",
-  "scope": "./",
-  "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#FFF3F8",
-  "theme_color": "#FF5DA2",
-  "lang": "en",
-  "categories": ["shopping", "productivity", "lifestyle"],
-  "icons": [
-
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%23FF5DA2'/%3E%3Ctext x='96' y='128' font-size='110' text-anchor='middle'%3E%F0%9F%9B%92%3C/text%3E%3C/svg%3E",
-      "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any"
-  
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%23FF5DA2'/%3E%3Ctext x='256' y='340' font-size='290' text-anchor='middle'%3E%F0%9F%9B%92%3C/text%3E%3C/svg%3E",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%23FF5DA2'/%3E%3Ctext x='256' y='340' font-size='290' text-anchor='middle'%3E%F0%9F%9B%92%3C/text%3E%3C/svg%3E",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
-    }
-  ],
-  "shortcuts": [
-    {
-      "name": "Add item",
-      "short_name": "Add",
-      "description": "Jump straight to adding a shopping item",
-      "url": "./index.html#add"
-    },
-    {
-      "name": "Kids+",
-      "short_name": "Kids+",
-      "description": "Open the Kids+ maths corner",
-      "url": "./index.html#kids"
-    }
-  ]
+/* ============================================================SHOPPIT — Candy Glaze × Chrome Pinstripe × Glass UI============================================================ */
+:root{
+	/* Candy Glaze palette */
+	--candy-pink: #FF5DA2;
+	--candy-pink-2: #FF8FC6;
+	--candy-purple: #9B5CF6;
+	--candy-teal: #2DD9C6;
+	--candy-yellow: #FFD447;
+	--candy-orange: #FF9A4D;
+	--candy-red: #FF5D5D;
+	--candy-green: #3EDC8A;
+	--bg-0: #FFF3F8;
+	--bg-1: #FDE9F3;
+	--ink-0: #2A1633;
+	--ink-1: #5B4468;
+	--ink-2: #8A7692;
+	--glass-fill: rgba(255,255,255,0.55);
+	--glass-fill-strong: rgba(255,255,255,0.78);
+	--glass-border: rgba(255,255,255,0.65);
+	--glass-shadow: 0 8px 32px rgba(155, 60, 120, 0.18);
+	--chrome-a: rgba(255,255,255,0.9);
+	--chrome-b: rgba(255,255,255,0.15);
+	--radius-lg: 26px;
+	--radius-md: 18px;
+	--radius-sm: 12px;
+	--font-display: 'Baloo 2', ui-rounded, system-ui, sans-serif;
+	--font-body: 'Nunito', system-ui, -apple-system, sans-serif;
+	--nav-h: 78px;
+	color-scheme: light;
 }
-/* ============================================================
-   SHOPPIT — service-worker.js
-   Offline-first caching for Android / iOS PWA install.
-   ============================================================ */
-
-const CACHE_VERSION = "shoppit-v1";
-const CORE_CACHE = CACHE_VERSION + "-core";
-const RUNTIME_CACHE = CACHE_VERSION + "-runtime";
-
-const CORE_ASSETS = [
-  "./",
-  "./index.html",
-  "./style.css",
-  "./app.js",
-  "./manifest.json"
-];
-
-/* ---------- INSTALL: pre-cache the app shell ---------- */
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CORE_CACHE)
-      .then((cache) => cache.addAll(CORE_ASSETS))
-      .then(() => self.skipWaiting())
-  );
-});
-
-/* ---------- ACTIVATE: clean up old caches ---------- */
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key.startsWith("shoppit-") && key !== CORE_CACHE && key !== RUNTIME_CACHE)
-          .map((key) => caches.delete(key))
-      )
-    ).then(() => self.clients.claim())
-  );
-});
-
-/* ---------- FETCH: cache-first for the app shell,
-   stale-while-revalidate for everything else (fonts, etc.) ---------- */
-self.addEventListener("fetch", (event) => {
-  const req = event.request;
-  if (req.method !== "GET") return;
-
-  const url = new URL(req.url);
-
-  // Navigation requests: always fall back to cached index.html when offline
-  if (req.mode === "navigate") {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CORE_CACHE).then((cache) => cache.put("./index.html", copy));
-          return res;
-        })
-        .catch(() => caches.match("./index.html"))
-    );
-    return;
-  }
-
-  // Same-origin core assets: cache-first
-  if (url.origin === self.location.origin) {
-    event.respondWith(
-      caches.match(req).then((cached) => {
-        if (cached) return cached;
-        return fetch(req)
-          .then((res) => {
-            const copy = res.clone();
-            caches.open(CORE_CACHE).then((cache) => cache.put(req, copy));
-            return res;
-          })
-          .catch(() => cached);
-      })
-    );
-    return;
-  }
-
-  // Cross-origin (fonts, CDN): stale-while-revalidate
-  event.respondWith(
-    caches.open(RUNTIME_CACHE).then((cache) =>
-      cache.match(req).then((cached) => {
-        const fetchPromise = fetch(req)
-          .then((res) => {
-            if (res && res.status === 200) cache.put(req, res.clone());
-            return res;
-          })
-          .catch(() => cached);
-        return cached || fetchPromise;
-      })
-    )
-  );
-});
-
-/* ---------- MESSAGE: allow page to trigger skipWaiting ---------- */
-self.addEventListener("message", (event) => {
-  if (event.data === "SKIP_WAITING") self.skipWaiting();
-});
+body[data-theme="dark"]{
+	--bg-0: #170F22;
+	--bg-1: #1F1430;
+	--ink-0: #F7EFFB;
+	--ink-1: #D8C6E4;
+	--ink-2: #A490B3;
+	--glass-fill: rgba(37, 24, 51, 0.55);
+	--glass-border: rgba(255,255,255,0.12);
+	--glass-shadow: 0 8px 36px rgba(0,0,0,0.5);
+	--chrome-a: rgba(255,255,255,0.18);
+	--chrome-b: rgba(255,255,255,0.02);
+	color-scheme: dark;
+	data-gold-theme="yellow-gold"<link rel="stylesheet" href="gold-themes.css">
+}
+*{
+	box-sizing: border-box;
+}
+html,body{
+	height:100%;
+}
+body{
+	margin:0;
+	font-family: var(--font-body);
+	color: var(--ink-0);
+	background:radial-gradient(circle at 12% 8%, rgba(255,212,71,0.35), transparent 45%),radial-gradient(circle at 90% 12%, rgba(45,217,198,0.30), transparent 40%),radial-gradient(circle at 50% 100%, rgba(155,92,246,0.22), transparent 45%),linear-gradient(180deg, var(--bg-0), var(--bg-1));
+	background-attachment: fixed;
+	-webkit-font-smoothing: antialiased;
+	transition: background 0.4s ease, color 0.3s ease;
+	overscroll-behavior-y: none;
+}
+hi,h2,h3{
+	font-family: var(--font-display);
+	margin:0;
+	color: var(--ink-0);
+	font-size: 18px;
+}
+p{
+	margin:0;
+}
+button, input, select, textarea{
+	font-family: inherit;
+}
+header{
+	font-size:32px;
+	text-shadow: 0px 3px 3px rgba(255,255,255,0.5), 2px 2px 2px rgba(255,143,198,0);
+	outline: 2px outset #E4E9EF;
+	outline-offset: 0px;
+}
+/* ---------- Glass base ---------- */
+.glass{
+	background: var(--glass-fill);
+	border: 2px solid var(--glass-border);
+	border-radius: var(--radius-lg);
+	backdrop-filter: blur(18px) saturate(160%);
+	-webkit-backdrop-filter: blur(18px) saturate(160%);
+	box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255,255,255,0.5);
+	position: relative;
+}
+body[data-theme="dark"] .glass{
+	box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+/* ---------- Chrome pinstripe strip ---------- */
+.chrome-strip{
+	position: relative;
+	overflow: hidden;
+}
+.chrome-strip::before{
+	content:"";
+	position:absolute;
+	inset:0;
+	background: repeating-linear-gradient(100deg,var(--chrome-a) 0px,var(--chrome-a) 1px,transparent 1px,transparent 5px);
+	opacity: .01;
+	mix-blend-mode: overlay;
+	pointer-events:none;
+}
+.chrome-strip::after{
+	content:"";
+	position:absolute;
+	inset:0;
+	background: linear-gradient(180deg, rgba(255,255,255,0.55), transparent 40%, transparent 70%, rgba(255,255,255,0.15));
+	pointer-events:none;
+}
+/* ============================================================SHELL============================================================ */
+.chrome-shell{
+	max-width: 560px;
+	margin: 0 auto;
+	min-height: 100vh;
+	min-height: 100dvh;
+	display:flex;
+	flex-direction:column;
+	padding-bottom: calc(var(--nav-h) + 14px);
+}
+/* ---------- Header ---------- */
+.topbar{
+	position: sticky;
+	top:0;
+	z-index: 30;
+	display:flex;
+	align-items:center;
+	justify-content:space-between;
+	padding: 1px, env(safe-area-inset-top)) 18px 14px;
+	border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+.brand{
+	display:flex;
+	align-items:center;
+	gap:8px;
+}
+.brand-mark{
+	font-size:29px;
+	filter: drop-shadow(0 2px 3px rgba(0,0,0,0.15));
+}
+.brand h1{
+	font-size: 42px;
+	font-weight:800;
+	letter-spacing:-0.02em;
+	background: linear-gradient(120deg, var(--candy-pink), var(--candy-purple) 60%, var(--candy-teal));
+	-webkit-background-clip:text;
+	background-clip:text;
+	color:transparent;
+}
+.brand-dot{
+	color: var(--candy-yellow);
+	-webkit-text-fill-color: var(--candy-yellow);
+}
+.topbar-actions{
+	display:inline-flex;
+	gap:px;
+}
+h5{
+	font-size:12px;
+	align-content: center;
+	margin-inline: 2px;
+}
+.icon-btn{
+	align-content: right;
+	margin-top: 8px;
+	width:90%;
+	border:1.5px solid var(--glass-border);
+  border-radius: 10%;
+	background: linear-gradient(120deg, var(--candy-pink), var(--candy-purple) 20%, var(--candy-teal));
+	var(--glass-fill-strong);
+	box-shadow: 0 3px 8px rgba(150,60,120,0.18), inset 0 1px 0 rgba(255,255,255,0.7);
+	font-size:20px;
+	cursor:pointer;
+	display:flex;
+	align-items:center;
+	justify-content:center;
+	color:#fff;
+	)transition: transform 0.15s ease, box-shadow 0.15s ease;
+	.icon-btn:active{
+		transform: scale(0.9);
+	}
+	.icon-btn.active-toggle{
+		background: linear-gradient(150deg, var(--candy-pink), var(--candy-purple));
+		color:#fff;
+		border-color: transparent;
+	}
+}
+.icon-btn:active{
+	transform: scale(0.9);
+}
+.icon-btn.active-toggle{
+	background: linear-gradient(150deg, var(--candy-pink), var(--candy-purple));
+	color:#fff;
+	border-color: transparent;
+}
+.offline-pill{
+	margin: 8px 18px 0;
+	padding:8px 14px;
+	text-align:center;
+	font-size:12.5px;
+	font-weight:700;
+	color:#7A3B00;
+	background: linear-gradient(120deg, var(--candy-yellow), var(--candy-orange));
+	border-radius: 999px;
+	box-shadow: 0 4px 10px rgba(255,154,77,0.35);
+}
+/* ============================================================VIEWS============================================================ */
+.views{
+	flex:1;
+	padding: 16px 16px 8px;
+}
+.view{
+	display:none;
+	animation: viewIn 0.35s ease;
+}
+.view.active{
+	display:block;
+}
+@keyframes viewIn{
+	from{
+		opacity:0;
+		transform: translateY(8px);
+	}
+	to{
+		opacity:1;
+		transform:none;
+	}
+}
+.card{
+	padding: 18px;
+	margin-bottom: 16px;
+}
+.eyebrow{
+	text-transform: uppercase;
+	font-size:11.5px;
+	font-weight:800;
+	letter-spacing: 0.08em;
+	color: var(--candy-purple);
+	margin-bottom:4px;
+}
+/* ---------- Budget card ---------- */
+.budget-card{
+	padding-top:20px;
+}
+.budget-head{
+	display:flex;
+	justify-content:space-between;
+	align-items:flex-start;
+	gap:18px;
+}
+.budget-edit{
+	display:flex;
+	align-items:baseline;
+	gap:2px;
+}
+.currency{
+	font-family: var(--font-display);
+	font-size:22px;
+	font-weight:700;
+	color: var(--ink-1);
+}
+#budgetInput{
+	border:none;
+	background:transparent;
+	outline:none;
+	font-family: var(--font-display);
+	font-size: 26px;
+	font-weight:800;
+	color: var(--ink-0);
+	width: 140px;
+}
+.budget-figures{
+	display:flex;
+	gap:15px;
+	text-align:right;
+}
+.fig-value{
+	font-family: var(--font-display);
+	font-size:16px;
+	font-weight:700;
+	color: var(--ink-0);
+}
+.fig-label{
+	font-size:14px;
+	color: var(--ink-2);
+	font-weight:700;
+	text-transform:;
+	letter-spacing:0.05em;
+}
+.progress-track{
+	margin-top:16px;
+	height:19px;
+	border-radius:999px;
+	background: rgba(0,0,0,0.06);
+	overflow:hidden;
+	position:relative;
+	border: 1px solid var(--glass-border);
+}
+body[data-theme="dark"] .progress-track{
+	background: rgba(255,255,255,0.06);
+}
+.progress-fill{
+	height:100%;
+	width:0%;
+	border-radius:999px;
+	background: linear-gradient(90deg, var(--candy-green), var(--candy-teal));
+	transition: width 0.6s cubic-bezier(.34,1.56,.64,1), background 0.4s ease;
+	position:relative;
+}
+.progress-fill.warn{
+	background: linear-gradient(90deg, var(--candy-yellow), var(--candy-orange));
+}
+.progress-fill.over{
+	background: linear-gradient(90deg, var(--candy-orange), var(--candy-red));
+}
+.progress-sheen{
+	position:absolute;
+	inset:0;
+	border-radius:999px;
+	pointer-events:none;
+	background: linear-gradient(180deg, rgba(255,255,255,0.65), transparent 55%);
+}
+.progress-caption{
+	margin-top:8px;
+	font-size:18.5px;
+	color: var(--ink-2);
+	font-weight:600;
+}
+/* ---------- Smart save tip ---------- */
+.tip-banner{
+	display:flex;
+	align-items:center;
+	gap:10px;
+	padding: 12px 14px;
+	margin-bottom:16px;
+	border-radius: var(--radius-md);
+	background: linear-gradient(120deg, rgba(255,212,71,0.35), rgba(255,93,162,0.25));
+	animation: tipIn 0.4s ease;
+}
+@keyframes tipIn{
+	from{
+		opacity:0;
+		transform: translateY(-6px);
+	}
+	to{
+		opacity:1;
+		transform:none;
+	}
+}
+.tip-icon{
+	font-size:20px;
+}
+#tipText{
+	flex:1;
+	font-size:13.5px;
+	font-weight:700;
+	color: var(--ink-0);
+}
+.tip-next{
+	border:none;
+	background: rgba(255,255,255,0.6);
+	width:26px;
+	height:26px;
+	border-radius:50%;
+	font-size:16px;
+	font-weight:800;
+	cursor:pointer;
+	color: var(--ink-0);
+}
+/* ---------- Add card ---------- */
+.add-card{
+	padding:8px;
+}
+.add-row{
+	display:flex;
+	gap:10px;
+	align-items:center;
+}
+.add-row + .add-row{
+	margin-top:10px;
+}
+.add-input-wrap{
+	position:relative;
+	flex:1;
+}
+#itemInput{
+	width:100%;
+	padding: 12px 14px;
+	border-radius: var(--radius-md);
+	border:1px solid var(--glass-border);
+	background: var(--glass-fill-strong);
+	font-size:22px;
+	font-weight:700;
+	color: var(--ink-0);
+	outline:none;
+}
+#itemInput::placeholder{
+	color: var(--ink-2);
+	font-weight:600;
+}
+#itemInput:focus{
+	box-shadow: 0 0 0 3px rgba(255,93,162,0.35);
+}
+.suggest-list{
+	position:absolute;
+	top: calc(100% + 6px);
+	left:0;
+	right:0;
+	list-style:none;
+	margin:0;
+	padding:6px;
+	background: var(--glass-fill-strong);
+	border:1px solid var(--glass-border);
+	border-radius: var(--radius-md);
+	backdrop-filter: blur(20px);
+	box-shadow: var(--glass-shadow);
+	z-index:20;
+	max-height:230px;
+	overflow-y:auto;
+}
+.suggest-item{
+	display:flex;
+	align-items:center;
+	gap:8px;
+	padding:9px 10px;
+	border-radius:10px;
+	cursor:pointer;
+	font-weight:700;
+	font-size:14px;
+}
+.suggest-item:hover, .suggest-item.active{
+	background: rgba(255,93,162,0.18);
+}
+.suggest-item small{
+	margin-left:auto;
+	color: var(--ink-2);
+	font-weight:600;
+}
+.mic-btn{
+	flex-shrink:0;
+	max-width: 50px;
+}
+.mic-btn.listening{
+	background: #A4A4A4;
+}
+linear-gradient(150deg, var(--candy-red), var(--candy-pink));
+color:#fff;
+border-color:transparent;
+animation: pulseMic 1s ease-in-out infinite;
+@keyframes pulseMic{
+	0%,100%{
+		box-shadow:0 0 0 0 rgba(255,93,93,0.5);
+	}
+	50%{
+		box-shadow:0 0 0 10px rgba(255,93,93,0);
+	}
+}
+.stepper{
+display:flex;
+align-items:center;
+gap:16px;
+background: var(--glass-fill-strong);
+border:1px solid var(--glass-border);
+border-radius: 999px;
+padding:12px 12px;
+}
+.stepper-btn{
+width:26px;
+height:26px;
+border-radius:50%;
+border:none;
+cursor:pointer;
+background: linear-gradient(150deg, var(--candy-purple), var(--candy-pink));
+color:#fff;
+font-size:22px;
+font-weight:800;
+line-height:1;
+margin: 1px;
+border:1px solid var(--glass-border);
+}
+#qtyValue{
+font-weight:800;
+min-width:1%;
+text-align:center;
+}
+.price-input{
+font-size: 22px;
+width: 60%;
+padding:10px 10px;
+border-radius: var(--radius-md);
+border:1px solid var(--glass-border);
+background: var(--glass-fill-strong);
+font-weight:700;
+outline:none;
+}
+.btn-primary{
+  justify-items:  center;
+  margin-left: 40%;
+  margin-top: 14px;
+flex-shrink:0;
+border:line,89px;
+cursor:pointer;
+padding:4px 18px;
+border-radius: 999px;
+font-weight:800;
+font-size:18px;
+  align-items:center;
+color:#fff;
+background: linear-gradient(135deg, var(--candy-pink), var(--candy-purple));
+box-shadow: 0 6px 16px rgba(255,93,162,0.4), inset 0 1px 0 rgba(255,255,255,0.4);
+transition: transform 0.12s ease;
+}
+.btn-primary:active{
+transform: scale(0.96);
+color: var(--candy-purple));
+}
+.btn-secondary{
+border:1px solid var(--glass-border);
+cursor:pointer;
+padding:10px 16px;
+border-radius:999px;
+font-weight:800;
+font-size:14px;
+color: var(--ink-0);
+background: var(--glass-fill-strong);
+}
+.text-btn{
+border:none;
+background:none;
+color: var(--candy-purple);
+font-weight:800;
+font-size:18px;
+cursor:pointer;
+}
+.text-btn.danger{
+color: var(--candy-red);
+}
+/* ---------- List ---------- */
+.list-head{
+display:flex;
+align-items:center;
+justify-content:space-between;
+margin: 6px 4px 10px;
+}
+.list-head h2{
+font-size:18px;
+}
+.list-head-actions{
+display:flex;
+align-items:center;
+gap:10px;
+}
+.count-pill{
+font-size:11.5px;
+font-weight:800;
+padding:4px 10px;
+border-radius:999px;
+background: rgba(155,92,246,0.16);
+color: var(--candy-purple);
+}
+.category-group{
+margin-bottom:14px;
+}
+.category-title{
+font-size:12px;
+font-weight:800;
+text-transform:uppercase;
+letter-spacing:0.06em;
+color: var(--ink-2);
+margin: 0 6px 8px;
+}
+.item-row{
+display:flex;
+align-items:center;
+gap:10px;
+padding: 12px;
+border-radius: var(--radius-md);
+margin-bottom:8px;
+background: var(--glass-fill);
+border:1px solid var(--glass-border);
+box-shadow: 0 4px 12px rgba(155,60,120,0.10);
+animation: itemIn 0.3s ease;
+}
+@keyframes itemIn{
+from{
+	opacity:0;
+	transform: translateX(-8px);
+}
+to{
+	opacity:1;
+	transform:none;
+}
+}
+.item-row.checked{
+opacity:0.55;
+}
+.item-row.checked .item-name{
+text-decoration: line-through;
+}
+.check-btn{
+width:26px;
+height:26px;
+border-radius:50%;
+flex-shrink:0;
+cursor:pointer;
+border: 2px solid var(--candy-purple);
+background: transparent;
+display:flex;
+align-items:center;
+justify-content:center;
+color:#fff;
+font-size:15px;
+font-weight:800;
+}
+.item-row.checked .check-btn{
+background: linear-gradient(150deg, var(--candy-green), var(--candy-teal));
+border-color:transparent;
+}
+.item-main{
+flex:1;
+min-width:0;
+}
+.item-name{
+font-weight:800;
+font-size:14.5px;
+color: var(--ink-0);
+}
+.item-meta{
+font-size:18px;
+color: var(--ink-2);
+font-weight:600;
+}
+.item-stepper{
+display:flex;
+align-items:center;
+gap:10px;
+}
+.item-stepper button{
+width:22px;
+height:22px;
+border-radius:50%;
+border:none;
+cursor:pointer;
+background: rgba(155,92,246,0.16);
+color: var(--candy-purple);
+font-weight:800;
+}
+.item-stepper span{
+min-width:14px;
+text-align:center;
+font-weight:800;
+font-size:18px;
+}
+.item-price{
+font-weight:800;
+font-size:18px;
+min-width:52px;
+text-align:right;
+color: var(--ink-0);
+}
+.item-delete{
+border:none;
+background:none;
+color: var(--ink-2);
+font-size:16px;
+cursor:pointer;
+padding:4px;
+}
+.empty-state{
+text-align:center;
+padding: 40px 10px;
+color: var(--ink-2);
+}
+.empty-emoji{
+font-size:40px;
+margin-bottom:8px;
+}
+/* ============================================================KIDS+============================================================ */
+.kids-hero{
+text-align:center;
+padding: 24px 18px;
+}
+.kids-sub{
+margin-top:6px;
+color: var(--ink-1);
+font-weight:600;
+font-size:10.5px;
+}
+.kids-stats{
+display:flex;
+justify-content:center;
+gap: 26px;
+margin-top:16px;
+}
+.kids-stats div{
+display:flex;
+flex-direction:column;
+align-items:center;
+}
+.kids-stats span{
+font-family: var(--font-display);
+font-size:22px;
+font-weight:800;
+color: var(--candy-pink);
+}
+.kids-stats small{
+font-size:11px;
+font-weight:700;
+color: var(--ink-2);
+text-transform:uppercase;
+}
+.level-grid{
+display:grid;
+grid-template-columns: repeat(3, 1fr);
+gap:10px;
+margin-bottom:16px;
+}
+.level-card{
+padding: 16px 8px;
+text-align:center;
+cursor:pointer;
+border:1px solid var(--glass-border);
+display:flex;
+flex-direction:column;
+align-items:center;
+gap:4px;
+}
+.level-emoji{
+font-size:26px;
+}
+.level-name{
+font-weight:800;
+font-size:12.5px;
+color: var(--ink-0);
+}
+.level-desc{
+font-size:10.5px;
+color: var(--ink-2);
+font-weight:600;
+}
+.level-card:active{
+transform: scale(0.96);
+}
+.quiz-card{
+text-align:center;
+padding: 24px 18px;
+}
+.quiz-top{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:14px;
+}
+.quiz-level-pill{
+font-size:11.5px;
+font-weight:800;
+padding:5px 12px;
+border-radius:999px;
+background: linear-gradient(120deg, var(--candy-pink), var(--candy-purple));
+color:#fff;
+}
+.quiz-question{
+font-family: var(--font-display);
+font-size:34px;
+font-weight:800;
+margin: 10px 0 20px;
+color: var(--ink-0);
+}
+.quiz-answers{
+display:grid;
+grid-template-columns: 1fr 1fr;
+gap:10px;
+}
+.quiz-answer-btn{
+padding: 16px;
+border-radius: var(--radius-md);
+border:1px solid var(--glass-border);
+background: var(--glass-fill-strong);
+font-weight:800;
+font-size:18px;
+cursor:pointer;
+color: var(--ink-0);
+}
+.quiz-answer-btn.correct{
+background: linear-gradient(150deg, var(--candy-green), var(--candy-teal));
+color:#fff;
+}
+.quiz-answer-btn.wrong{
+background: linear-gradient(150deg, var(--candy-red), var(--candy-orange));
+color:#fff;
+}
+.quiz-feedback{
+margin-top:14px;
+font-weight:800;
+color: var(--candy-purple);
+min-height:20px;
+}
+/* ============================================================SETTINGS============================================================ */
+.setting-row{
+display:flex;
+align-items:center;
+justify-content:space-between;
+gap:14px;
+padding: 14px 0;
+border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+body[data-theme="dark"] .setting-row{
+border-bottom-color: rgba(255,255,255,0.08);
+}
+.setting-row:last-of-type{
+border-bottom:none;
+}
+.setting-title{
+font-weight:800;
+font-size:14.5px;
+}
+.setting-sub{
+font-size:12px;
+color: var(--ink-2);
+font-weight:600;
+margin-top:2px;
+}
+.setting-row select{
+padding:8px 10px;
+border-radius:10px;
+border:1px solid var(--glass-border);
+background: var(--glass-fill-strong);
+font-weight:700;
+color: var(--ink-0);
+}
+.app-version{
+text-align:center;
+font-size:11.5px;
+color: var(--ink-2);
+margin-top:10px;
+font-weight:600;
+}
+.switch{
+position:relative;
+display:inline-block;
+width:50px;
+height:28px;
+}
+.switch input{
+opacity:0;
+width:0;
+height:0;
+}
+.switch-track{
+position:absolute;
+inset:0;
+border-radius:999px;
+background: rgba(0,0,0,0.15);
+transition: 0.25s;
+}
+.switch-thumb{
+position:absolute;
+top:3px;
+left:3px;
+width:22px;
+height:22px;
+border-radius:50%;
+background:#fff;
+box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+transition: 0.25s;
+}
+.switch input:checked + .switch-track{
+background: linear-gradient(120deg, var(--candy-pink), var(--candy-purple));
+}
+.switch input:checked + .switch-track .switch-thumb{
+transform: translateX(22px);
+}
+/* ============================================================BOTTOM NAV============================================================ */
+.bottom-nav{
+position: fixed;
+bottom:0;
+left:50%;
+transform: translateX(-50%);
+width:100%;
+max-width:560px;
+height: var(--nav-h);
+display:flex;
+z-index:30;
+border-radius: 2px;
+padding-bottom: env(safe-area-inset-bottom);
+}
+.nav-btn{
+flex:1;
+border:line;
+border-radius:5px;
+background:none;
+cursor:pointer;
+display:flex;
+flex-direction:column;
+align-items:center;
+justify-content:center;
+gap:3px;
+font-size:18px;
+font-weight:800;
+color: var(--ink-2);
+}
+.nav-icon{
+font-size:28px;
+filter: grayscale(1) opacity(0.7);
+transition: filter 0.2s ease, transform 0.2s ease;
+}
+.nav-btn.active{
+color: var;
+}
+.nav-btn.active .nav-icon{
+filter:none;
+transform: translateY(-2px) scale(1.1);
+}
+/* ============================================================MODALS============================================================ */
+.modal-overlay{
+position:fixed;
+inset:0;
+background: rgba(20,10,25,0.45);
+display:flex;
+align-items:flex-end;
+justify-content:center;
+z-index:100;
+animation: overlayIn 0.25s ease;
+backdrop-filter: blur(3px);
+}
+.modal-overlay[hidden]{
+display:none;
+}
+@keyframes overlayIn{
+from{
+	opacity:0;
+}
+to{
+	opacity:1;
+}
+}
+.modal{
+width:100%;
+max-width:520px;
+padding: 22px 20px calc(24px + env(safe-area-inset-bottom));
+border-radius: 28px 28px 0 0;
+position:relative;
+animation: modalUp 0.32s cubic-bezier(.2,.9,.3,1.2);
+}
+@media (min-width:600px){
+.modal-overlay{
+	align-items:center;
+}
+.modal{
+	border-radius: var(--radius-lg);
+}
+}
+@keyframes modalUp{
+from{
+	transform: translateY(40px);
+	opacity:0;
+}
+to{
+	transform:none;
+	opacity:1;
+}
+}
+.modal h3{
+font-size:19px;
+margin-bottom:14px;
+text-align:center;
+}
+.modal-close{
+position:absolute;
+top:14px;
+right:14px;
+width:32px;
+height:32px;
+border-radius:50%;
+border:none;
+background: rgba(0,0,0,0.08);
+cursor:pointer;
+font-size:14px;
+color: var(--ink-0);
+}
+.modal-actions{
+display:flex;
+gap:10px;
+margin-top:16px;
+}
+.modal-actions button{
+flex:1;
+}
+/* Timer */
+.timer-ring-wrap{
+position:relative;
+width:200px;
+height:200px;
+margin: 0 auto 16px;
+}
+.timer-ring{
+width:100%;
+height:100%;
+transform: rotate(-90deg);
+}
+.timer-ring-bg{
+fill:none;
+stroke: rgba(0,0,0,0.08);
+stroke-width:10;
+}
+body[data-theme="dark"] .timer-ring-bg{
+stroke: rgba(255,255,255,0.08);
+}
+.timer-ring-fg{
+fill:none;
+stroke: url(#none);
+stroke: var(--candy-pink);
+stroke-width:10;
+stroke-linecap:round;
+stroke-dasharray: 327;
+stroke-dashoffset: 0;
+transition: stroke-dashoffset 1s linear;
+}
+.timer-display{
+position:absolute;
+inset:0;
+display:flex;
+align-items:center;
+justify-content:center;
+font-family: var(--font-display);
+font-size:34px;
+font-weight:800;
+color: var(--ink-0);
+}
+.timer-presets{
+display:flex;
+gap:8px;
+justify-content:center;
+flex-wrap:wrap;
+margin-bottom:16px;
+}
+.chip{
+border:1px solid var(--glass-border);
+background: var(--glass-fill-strong);
+padding:8px 14px;
+border-radius:999px;
+font-weight:800;
+font-size:12.5px;
+cursor:pointer;
+color: var(--ink-0);
+}
+.chip.active{
+background: linear-gradient(120deg, var(--candy-pink), var(--candy-purple));
+color:#fff;
+border-color:transparent;
+}
+.timer-controls{
+display:flex;
+gap:10px;
+}
+.timer-controls button{
+flex:1;
+}
+/* Scanner */
+.scan-frame{
+position:relative;
+height:180px;
+border-radius: var(--radius-md);
+margin-bottom:14px;
+background: linear-gradient(160deg, rgba(45,217,198,0.18), rgba(155,92,246,0.18));
+border: 2px dashed rgba(155,92,246,0.4);
+display:flex;
+align-items:center;
+justify-content:center;
+overflow:hidden;
+}
+.scan-emoji{
+font-size:44px;
+opacity:0.7;
+}
+.scan-laser{
+position:absolute;
+left:6%;
+right:6%;
+height:2px;
+background: var(--candy-red);
+box-shadow: 0 0 8px var(--candy-red);
+animation: laserMove 1.6s ease-in-out infinite;
+}
+@keyframes laserMove{
+0%,100%{
+	top:10%;
+}
+50%{
+	top:88%;
+}
+}
+.scan-hint{
+text-align:center;
+color: var(--ink-2);
+font-weight:600;
+font-size:13px;
+margin-bottom:16px;
+}
+.scan-result-card{
+display:flex;
+align-items:center;
+gap:14px;
+padding:16px;
+background: var(--glass-fill-strong);
+border-radius: var(--radius-md);
+border:1px solid var(--glass-border);
+}
+.scan-result-emoji{
+font-size:38px;
+}
+.scan-result-name{
+font-weight:800;
+font-size:16px;
+}
+.scan-result-price{
+font-weight:700;
+color: var(--candy-purple);
+}
+/* Export */
+.export-actions{
+display:grid;
+grid-template-columns: 1fr 1fr;
+gap:10px;
+margin: 14px 0;
+}
+.export-preview{
+width:100%;
+min-height:120px;
+border-radius: var(--radius-md);
+border:1px solid var(--glass-border);
+background: var(--glass-fill-strong);
+padding:12px;
+font-family: 'SFMono-Regular', Menlo, monospace;
+font-size:12.5px;
+color: var(--ink-0);
+resize:vertical;
+}
+/* Toast */
+.toast{
+position: fixed;
+left:50%;
+bottom: calc(var(--nav-h) + 16px);
+transform: translateX(-50%) translateY(20px);
+background: var(--ink-0);
+color:#fff;
+padding: 11px 20px;
+border-radius: 999px;
+font-weight:700;
+font-size:13.5px;
+opacity:0;
+pointer-events:none;
+transition: 0.3s ease;
+z-index:200;
+box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+max-width: 86%;
+text-align:center;
+}
+.toast.show{
+opacity:1;
+transform: translateX(-50%) translateY(0);
+}
+/* ---------- Scrollbars ---------- */
+::-webkit-scrollbar{
+width:8px;
+height:8px;
+}
+::-webkit-scrollbar-thumb{
+background: rgba(155,92,246,0.35);
+border-radius:8px;
+}
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce){
+*{
+	animation-duration: 0.001ms !important;
+	transition-duration: 0.001ms !important;
+}
+}
+/* ---------- Focus visibility ---------- */
+button:focus-visible, input:focus-visible, select:focus-visible{
+outline: 3px solid var(--candy-teal);
+outline-offset:2px;
+}
+/* ---------- Small screens ---------- */
+@media (max-width:360px){
+.add-row-secondary{
+	flex-wrap:wrap;
+}
+.price-input{
+	width: 76px;
+}
+}
